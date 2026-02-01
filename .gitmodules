@@ -1,0 +1,6 @@
+[submodule "services/announcements"]
+	path = services/announcements
+	url = git@github.com:aaronromeo/announcements.git
+[submodule "services/yt-dlp"]
+	path = services/yt-dlp
+	url = git@github.com:aaronromeo/yt-dlp.git
