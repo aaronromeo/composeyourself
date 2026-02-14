@@ -107,6 +107,7 @@ sudo groupadd -f dockershare
 sudo usermod -aG dockershare [non-root-system-user]
 sudo usermod -aG dockershare dockerops
 
+sudo mkdir /mnt/storage/logs
 sudo chgrp -R dockershare /mnt/storage
 sudo chmod -R g+rwX /mnt/storage
 sudo find /mnt/storage -type d -exec chmod g+s {} \;
@@ -127,7 +128,7 @@ sudo -u dockerops vi /opt/docker/composeyourself/.env
 
 7. Enable the daemon file
 ```bash
-sudwo systemctl daemon-reload
+sudo systemctl daemon-reload
 sudo systemctl enable --now composeyourself.service
 ```
 
