@@ -41,7 +41,7 @@ services:
         reservations:
           memory: 256M
     networks:
-      - pi-services
+      - cys-service
 
   announcements:
     build:
@@ -61,7 +61,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - pi-services
+      - cys-service
 
   tailscale:
     image: tailscale/tailscale:latest
@@ -180,6 +180,21 @@ services:
           # Gigabytes of memory
           memory: '4G'
 
+  # Open WebUI
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:8080"
+    volumes:
+      - ./services/agenticui:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
+      - OPENAI_API_KEY=${OPENROUTER_API_KEY}
+    networks:
+      - cys-service
+
 
   # Future services can be added here:
   # Example structure for additional services:
@@ -194,7 +209,7 @@ services:
   #     - ./services/jellyfin/config:/config
   #     - /mnt/storage/media:/media
   #   networks:
-  #     - pi-services
+  #     - cys-service
   #
   # plex:
   #   image: plexinc/pms-docker:latest
@@ -206,11 +221,11 @@ services:
   #     - ./services/plex/config:/config
   #     - /mnt/storage/media:/media
   #   networks:
-  #     - pi-services
+  #     - cys-service
 
 # Shared network for all services
 networks:
-  pi-services:
+  cys-service:
     driver: bridge
 
 volumes:
