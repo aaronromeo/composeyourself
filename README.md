@@ -202,6 +202,14 @@ Then start only Open WebUI:
 docker compose up -d openwebui
 ```
 
+To allow LAN access to Open WebUI on `http://<host>:3000` and Immich on `http://<host>:2283`, add UFW rules for your subnet:
+
+```bash
+sudo ufw allow from 192.168.86.0/24 to any port 3000 proto tcp
+sudo ufw allow from 192.168.86.0/24 to any port 2283 proto tcp
+sudo ufw status verbose
+```
+
 ## Troubleshooting
 
 ### Container Won't Start
