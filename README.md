@@ -6,6 +6,11 @@ ComposeYourself is a multi-service Docker stack for a Raspberry Pi (or any Linux
 
 See `docker-compose.yml` for the active service list. Services may be added/removed over time.
 
+- `yt-dlp` on `http://<host>:8080`
+- `announcements` on `127.0.0.1:8091`
+- `immich-server` on `http://<host>:2283`
+- `openwebui` on `http://127.0.0.1:3000`
+
 ## Project Structure
 
 This repo uses Git submodules for some services. Make sure to initialize them before building or deploying.
@@ -14,6 +19,7 @@ This repo uses Git submodules for some services. Make sure to initialize them be
 /home/pi/workspace/composeyourself/
 ├── docker-compose.yml          # Multi-service orchestration
 ├── services/
+│   ├── agenticui/              # Open WebUI persistent data
 │   ├── announcements/         # Service submodule
 │   └── yt-dlp/                 # Service submodule
 └── [future services...]       # Additional services go here
@@ -176,6 +182,26 @@ docker compose up -d <service-name>
 
 Configuration is service-specific. See each service's README or the service directory for details.
 
+### Open WebUI + OpenRouter
+
+Open WebUI is configured in `docker-compose.yml` with:
+- Port mapping: `127.0.0.1:3000:8080`
+- Persistent data: `./services/agenticui:/app/backend/data`
+- OpenRouter base URL: `OPENAI_API_BASE_URL=https://openrouter.ai/api/v1`
+- API key mapping: `OPENAI_API_KEY=${OPENROUTER_API_KEY}`
+
+Set this in `.env`:
+
+```bash
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+```
+
+Then start only Open WebUI:
+
+```bash
+docker compose up -d openwebui
+```
+
 ## Troubleshooting
 
 ### Container Won't Start
@@ -206,6 +232,7 @@ docker compose build --no-cache
 ├── deploy.sh                   # Deploy all services
 ├── update.sh                   # Pull and refresh services
 ├── services/
+│   ├── agenticui/              # Open WebUI persistent data
 │   ├── announcements/         # Service submodule
 │   └── yt-dlp/                # Service submodule
 └── README.md                  # This file
