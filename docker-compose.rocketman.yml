@@ -1,0 +1,167 @@
+# Docker Compose for Rocketman (Raspberry Pi)
+# 
+# Services:
+#   - yt-dlp: Video/audio downloader web interface
+#   - announcements: Discord webhook service
+#   - immich: Photo management (server, ML, redis, postgres)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d
+
+services:
+  # yt-dlp Web Interface Service
+  yt-dlp:
+    build:
+      context: ./services/yt-dlp
+      dockerfile: Dockerfile
+    container_name: yt-dlp
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Video downloads
+      - /mnt/storage/media/downloads:/downloads
+      # Audio downloads (separated)
+      - /mnt/storage/media/downloads/audio:/downloads/audio
+      # Logs and state
+      - /mnt/storage/media/downloads/.logs:/app/logs
+    environment:
+      # Download directories
+      - DOWNLOAD_DIR=/downloads
+      - AUDIO_DIR=/downloads/audio
+      - LOG_FILE=/app/logs/yt-dlp-web.log
+      # Server configuration
+      - PORT=8080
+      # Optional: Set timezone
+      - TZ=America/Toronto
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Optional: Resource limits for Raspberry Pi
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    networks:
+      - cys-service
+
+  # Discord Announcements Service
+  announcements:
+    build:
+      context: ./services/announcements
+      dockerfile: Dockerfile
+    container_name: announcements
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8091"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - PORT=8091
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8091/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cys-service
+
+  # Immich Server
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    volumes:
+      # Do not edit the next line. If you want to change the media storage location on your system, edit the value of UPLOAD_LOCATION in the .env file
+      - ${UPLOAD_LOCATION}:/data
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - '2283:2283'
+    depends_on:
+      - redis
+      - database
+    restart: always
+    healthcheck:
+      disable: false
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      - model-cache:/cache
+    env_file:
+      - .env
+    restart: always
+    healthcheck:
+      disable: false
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8@sha256:81db6d39e1bba3b3ff32bd3a1b19a6d69690f94a3954ec131277b9a26b95b3aa
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      # Do not edit the next line. If you want to change the database storage location on your system, edit the value of DB_DATA_LOCATION in the .env file
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: always
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+# Shared network for all services
+networks:
+  cys-service:
+    driver: bridge
+
+volumes:
+  model-cache:

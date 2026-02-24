@@ -1,0 +1,69 @@
+# Authelia Users Database
+# File-based user authentication
+#
+# IMPORTANT: This file contains sensitive information!
+# - Never commit to git with real passwords
+# - Keep a backup in your password manager
+# - Regenerate with strong passwords before production use
+#
+# To generate a password hash:
+#   docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'yourpassword'
+#
+# Or use the full setup command after Authelia is running
+
+users:
+  # Example user - REPLACE WITH YOUR OWN CREDENTIALS
+  # Password hash below is for 'password123' - CHANGE THIS!
+  admin:
+    displayname: "Administrator"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
+    email: admin@example.com
+    groups:
+      - admins
+      - users
+
+  # Second user - REPLACE WITH YOUR OWN CREDENTIALS
+  user1:
+    displayname: "User One"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
+    email: user1@example.com
+    groups:
+      - users
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+#
+# 1. Generate secure password hashes for each user:
+#
+#    After Authelia container is running, exec into it:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+#
+#    Then generate a password hash:
+#    authelia crypto hash generate argon2 --password 'YourSecurePassword123!'
+#
+# 2. Update this file with:
+#    - Real usernames (lowercase, no spaces)
+#    - Generated password hashes
+#    - Real email addresses
+#    - Appropriate display names
+#
+# 3. Restart Authelia to pick up changes:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+#
+# 4. First login:
+#    - Go to https://sweetpaintedlady.overachieverlabs.com
+#    - Log in with username and password
+#    - You'll be prompted to set up 2FA (TOTP app like Google Authenticator)
+#
+# =============================================================================
+# PASSWORD REQUIREMENTS
+# =============================================================================
+#
+# While Authelia doesn't enforce password complexity by default, we recommend:
+#   - Minimum 12 characters
+#   - Mix of uppercase, lowercase, numbers, and symbols
+#   - No dictionary words or personal information
+#   - Use a password manager to generate and store
+#
+# =============================================================================

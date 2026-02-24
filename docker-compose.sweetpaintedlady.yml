@@ -1,0 +1,111 @@
+# Docker Compose for Sweetpaintedlady (DigitalOcean VPS)
+#
+# Services:
+#   - openwebui: AI chat interface with OpenRouter
+#   - caddy: Reverse proxy with auto HTTPS
+#   - authelia: MFA authentication server
+#
+# Access:
+#   https://sweetpaintedlady.overachieverlabs.com
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d
+
+services:
+  # Open WebUI - AI Chat Interface
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    # No direct port exposure - accessed via Caddy reverse proxy
+    # Port 8080 exposed only to internal network
+    expose:
+      - "8080"
+    volumes:
+      - ./services/agenticui:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
+      - OPENAI_API_KEY=${OPENROUTER_API_KEY}
+      - ENV=production
+      # Disable Open WebUI's built-in auth since Authelia handles it
+      # Or enable it as secondary protection
+      - ENABLE_SIGNUP=false
+      - DEFAULT_MODELS=${OPENWEBUI_DEFAULT_MODELS:-}
+      - DEFAULT_USER_ROLE=user
+    networks:
+      - cys-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Caddy - Reverse Proxy with Auto HTTPS
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-sweetpaintedlady.overachieverlabs.com}
+    networks:
+      - cys-service
+    depends_on:
+      - authelia
+      - openwebui
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Authelia - MFA Authentication Server
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    restart: unless-stopped
+    expose:
+      - "9091"
+    volumes:
+      - ./services/authelia/configuration.yml:/config/configuration.yml:ro
+      - ./services/authelia/users_database.yml:/config/users_database.yml:ro
+      - authelia_data:/config
+    environment:
+      - TZ=America/Toronto
+      - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+      - AUTHELIA_NOTIFIER_SMTP_HOST=${AUTHELIA_SMTP_HOST}
+      - AUTHELIA_NOTIFIER_SMTP_PORT=${AUTHELIA_SMTP_PORT}
+      - AUTHELIA_NOTIFIER_SMTP_USERNAME=${AUTHELIA_SMTP_USERNAME}
+      - AUTHELIA_NOTIFIER_SMTP_PASSWORD=${AUTHELIA_SMTP_PASSWORD}
+      - AUTHELIA_NOTIFIER_SMTP_SENDER=${AUTHELIA_SMTP_SENDER}
+    networks:
+      - cys-service
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Shared network for all services
+networks:
+  cys-service:
+    driver: bridge
+
+volumes:
+  caddy_data:
+    # Persist TLS certificates
+  caddy_config:
+    # Persist Caddy configuration
+  authelia_data:
+    # Persist Authelia database and state

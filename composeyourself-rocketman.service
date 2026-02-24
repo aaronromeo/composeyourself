@@ -1,0 +1,22 @@
+[Unit]
+Description=Compose Yourself stack - Rocketman
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=dockerops
+Group=dockerops
+WorkingDirectory=/opt/docker/composeyourself
+Environment="HOME=/opt/docker"
+Environment="DOCKER_HOST=unix:///var/run/docker.sock"
+# Use multiple compose files: base + rocketman-specific
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml down
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

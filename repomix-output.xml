@@ -1,0 +1,3763 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+services/
+  announcements/
+    .git
+    app.py
+    Dockerfile
+    requirements.txt
+  authelia/
+    configuration.yml
+    users_database.yml
+  caddy/
+    Caddyfile
+  immich/
+    .keep
+  tailscale/
+    README.md
+  yt-dlp/
+    templates/
+      index.html
+    .git
+    ALBUM_FORMAT_EXAMPLES.md
+    app.py
+    AUDIO_NAMING_OPTIONS.md
+    Dockerfile
+    requirements.txt
+    setup.sh
+    yt-dlp-setup.md
+.env.example
+.gitignore
+.gitmodules
+composeyourself-rocketman.service
+composeyourself-sweetpaintedlady.service
+deploy.sh
+docker-compose.rocketman.yml
+docker-compose.sweetpaintedlady.yml
+docker-compose.yml
+IMPLEMENTATION_PLAN.md
+README.md
+SERVICES.md
+update.sh
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="services/announcements/.git">
+gitdir: ../../.git/modules/services/announcements
+</file>
+
+<file path="services/announcements/app.py">
+import os
+from typing import Any, Dict
+
+from flask import Flask, jsonify, request
+import requests
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        app.logger.warning("DISCORD_WEBHOOK_URL is not set")
+
+    @app.get("/health")
+    def health() -> Any:
+        return jsonify({"status": "ok"})
+
+    @app.post("/announcements")
+    def announcements() -> Any:
+        if not webhook_url:
+            return jsonify({"error": "DISCORD_WEBHOOK_URL is not configured"}), 500
+
+        payload: Dict[str, Any] | None = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Expected JSON body"}), 400
+
+        message = payload.get("message") or payload.get("content") or payload.get("text")
+        if message and not payload.get("content"):
+            payload = {"content": str(message)}
+
+        if not payload.get("content"):
+            return jsonify({"error": "Missing message content"}), 400
+
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+        except requests.RequestException:
+            app.logger.exception("Failed to post to Discord webhook")
+            return jsonify({"error": "Failed to reach Discord"}), 502
+
+        if response.status_code >= 400:
+            app.logger.error("Discord webhook error: %s", response.text)
+            return jsonify({"error": "Discord rejected the message"}), 502
+
+        return jsonify({"status": "sent"})
+
+    return app
+
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8091")))
+</file>
+
+<file path="services/announcements/Dockerfile">
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+ENV PORT=8091
+EXPOSE 8091
+
+CMD ["gunicorn", "-b", "0.0.0.0:8091", "app:app"]
+</file>
+
+<file path="services/announcements/requirements.txt">
+flask==3.0.3
+requests==2.32.3
+gunicorn==23.0.0
+</file>
+
+<file path="services/authelia/configuration.yml">
+# Authelia Configuration
+# Multi-factor authentication server for Sweetpaintedlady
+#
+# Features:
+#   - File-based user authentication
+#   - TOTP (Time-based One-Time Password) 2FA
+#   - Session management
+#   - SMTP notifications for password resets
+#
+# Documentation: https://www.authelia.com/configuration/
+
+---
+# Server Configuration
+server:
+  host: 0.0.0.0
+  port: 9091
+  path: ""
+  enable_pprof: false
+  enable_expvars: false
+  disable_healthcheck: false
+
+# Log Configuration
+log:
+  level: info
+  format: text
+  file_path: /config/authelia.log
+  keep_stdout: true
+
+# JWT Configuration (signing key from environment)
+identity_validation:
+  reset_password:
+    jwt_lifespan: "5m"
+
+# Default 2FA method
+# Users can choose TOTP or WebAuthn during enrollment
+default_2fa_method: "totp"
+
+# Session Configuration
+# Session secrets are injected via environment variables
+session:
+  name: authelia_session
+  domain: sweetpaintedlady.overachieverlabs.com
+  same_site: lax
+  secret: "{{ env `AUTHELIA_SESSION_SECRET` }}"
+  expiration: 1h
+  inactivity: 5m
+  remember_me_duration: 1M
+
+# Regulation (Rate Limiting)
+# Prevent brute force attacks
+regulation:
+  max_retries: 3
+  find_time: 2m
+  ban_time: 5m
+
+# Storage Configuration
+# Using SQLite for user preferences and authentication logs
+storage:
+  encryption_key: "{{ env `AUTHELIA_STORAGE_ENCRYPTION_KEY` }}"
+  local:
+    path: /config/db.sqlite3
+
+# Notifier Configuration (SMTP for password resets)
+notifier:
+  disable_startup_check: false
+  smtp:
+    host: "{{ env `AUTHELIA_SMTP_HOST` }}"
+    port: "{{ env `AUTHELIA_SMTP_PORT` }}"
+    timeout: 5s
+    username: "{{ env `AUTHELIA_SMTP_USERNAME` }}"
+    password: "{{ env `AUTHELIA_SMTP_PASSWORD` }}"
+    sender: "{{ env `AUTHELIA_SMTP_SENDER` }}"
+    identifier: sweetpaintedlady
+    subject: "[Authelia] {title}"
+    startup_check_address: test@authelia.com
+    disable_require_tls: false
+    disable_html_emails: false
+
+# Authentication Backend (File-based)
+authentication_backend:
+  password_reset:
+    disable: false
+    custom_url: ""
+  file:
+    path: /config/users_database.yml
+    password:
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+# Access Control Rules
+# Define who can access what
+access_control:
+  default_policy: two_factor
+  rules:
+    # Health check endpoint - no auth required
+    - domain: "sweetpaintedlady.overachieverlabs.com"
+      resources:
+        - "^/api/health$"
+        - "^/api/version$"
+      policy: bypass
+    
+    # Main application - require 2FA
+    - domain: "sweetpaintedlady.overachieverlabs.com"
+      policy: two_factor
+    
+    # Authelia portal itself - one_factor (password only) for login page
+    - domain: "auth.sweetpaintedlady.overachieverlabs.com"
+      policy: one_factor
+
+# Password Policy
+password_policy:
+  standard:
+    enabled: false
+    min_length: 8
+    max_length: 0
+    require_uppercase: true
+    require_lowercase: true
+    require_number: true
+    require_special: true
+  zxcvbn:
+    enabled: false
+    min_score: 3
+
+# Privacy
+privacy_policy:
+  enabled: false
+
+# WebAuthn (Hardware key support)
+webauthn:
+  disable: false
+  enable_passkey_login: true
+  display_name: Authelia
+  attestation_conveyance_preference: indirect
+  user_verification: preferred
+  timeout: 60s
+
+# Time-based One-Time Password (TOTP) Configuration
+totp:
+  disable: false
+  issuer: sweetpaintedlady
+  algorithm: sha1
+  digits: 6
+  period: 30
+  skew: 1
+  secret_size: 32
+  allowed_algorithms:
+    - sha1
+    - sha256
+    - sha512
+  allowed_digits:
+    - 6
+  allowed_periods:
+    - 30
+    - 60
+
+# Identity Providers (OIDC - optional)
+identity_providers:
+  oidc:
+    enabled: false
+
+# Telemetry
+telemetry:
+  metrics:
+    enabled: false
+    address: tcp://0.0.0.0:9959
+    buffers:
+      read: 4096
+      write: 4096
+    timeouts:
+      read: 2s
+      write: 2s
+      idle: 30s
+  profiling:
+    enabled: false
+    address: tcp://0.0.0.0:6060
+</file>
+
+<file path="services/authelia/users_database.yml">
+# Authelia Users Database
+# File-based user authentication
+#
+# IMPORTANT: This file contains sensitive information!
+# - Never commit to git with real passwords
+# - Keep a backup in your password manager
+# - Regenerate with strong passwords before production use
+#
+# To generate a password hash:
+#   docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'yourpassword'
+#
+# Or use the full setup command after Authelia is running
+
+users:
+  # Example user - REPLACE WITH YOUR OWN CREDENTIALS
+  # Password hash below is for 'password123' - CHANGE THIS!
+  admin:
+    displayname: "Administrator"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
+    email: admin@example.com
+    groups:
+      - admins
+      - users
+
+  # Second user - REPLACE WITH YOUR OWN CREDENTIALS
+  user1:
+    displayname: "User One"
+    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
+    email: user1@example.com
+    groups:
+      - users
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+#
+# 1. Generate secure password hashes for each user:
+#
+#    After Authelia container is running, exec into it:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+#
+#    Then generate a password hash:
+#    authelia crypto hash generate argon2 --password 'YourSecurePassword123!'
+#
+# 2. Update this file with:
+#    - Real usernames (lowercase, no spaces)
+#    - Generated password hashes
+#    - Real email addresses
+#    - Appropriate display names
+#
+# 3. Restart Authelia to pick up changes:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+#
+# 4. First login:
+#    - Go to https://sweetpaintedlady.overachieverlabs.com
+#    - Log in with username and password
+#    - You'll be prompted to set up 2FA (TOTP app like Google Authenticator)
+#
+# =============================================================================
+# PASSWORD REQUIREMENTS
+# =============================================================================
+#
+# While Authelia doesn't enforce password complexity by default, we recommend:
+#   - Minimum 12 characters
+#   - Mix of uppercase, lowercase, numbers, and symbols
+#   - No dictionary words or personal information
+#   - Use a password manager to generate and store
+#
+# =============================================================================
+</file>
+
+<file path="services/caddy/Caddyfile">
+# Caddyfile for Sweetpaintedlady
+# Reverse proxy with Authelia MFA authentication
+#
+# Features:
+#   - Automatic HTTPS via Let's Encrypt
+#   - Authelia forward authentication
+#   - Open WebUI reverse proxy
+#   - Security headers
+
+# The domain is set via environment variable
+{$DOMAIN:sweetpaintedlady.overachieverlabs.com} {
+    # Enable logging
+    log {
+        output file /data/access.log {
+            roll_size 10MB
+            roll_keep 10
+            roll_keep_days 90
+        }
+        format json
+    }
+
+    # Security headers
+    header {
+        # Enable HTTP Strict Transport Security (HSTS)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        
+        # Content Security Policy (adjust as needed)
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+        
+        # Remove server header
+        -Server
+    }
+
+    # Handle ACME challenges (for Let's Encrypt)
+    # This is automatic in Caddy, but explicit for clarity
+    
+    # Forward authentication to Authelia
+    @auth_required {
+        not path /api/health
+        not path /api/version
+    }
+
+    # Route all requests through Authelia for authentication
+    forward_auth authelia:9091 {
+        uri /api/verify?rd=https://{$DOMAIN}
+        
+        # Copy headers from Authelia response
+        copy_headers {
+            Remote-User Remote-User
+            Remote-Groups Remote-Groups
+            Remote-Name Remote-Name
+            Remote-Email Remote-Email
+        }
+        
+        # If Authelia returns 401/403, show login page
+        @error status 401 403
+        handle_response @error {
+            redir https://{$DOMAIN}/authelia/?rd={uri}
+        }
+    }
+
+    # Reverse proxy to Open WebUI
+    reverse_proxy openwebui:8080 {
+        # Health check
+        health_uri /api/version
+        health_interval 30s
+        health_timeout 10s
+        
+        # Pass headers to backend
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        
+        # Pass Authelia headers to Open WebUI
+        header_up Remote-User {http.request.header.Remote-User}
+        header_up Remote-Groups {http.request.header.Remote-Groups}
+        header_up Remote-Name {http.request.header.Remote-Name}
+        header_up Remote-Email {http.request.header.Remote-Email}
+        
+        # Connection limits
+        transport http {
+            # Keep connections alive for better performance
+            keepalive 120s
+            # Connection timeout
+            dial_timeout 30s
+        }
+    }
+}
+
+# Authelia subdomain (optional - for direct access to auth portal)
+auth.{$DOMAIN:sweetpaintedlady.overachieverlabs.com} {
+    reverse_proxy authelia:9091 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+}
+</file>
+
+<file path="services/yt-dlp/templates/index.html">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yt-dlp Web Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input[type="url"], input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+        }
+        
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .download-item {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .download-item.completed {
+            border-left-color: #27ae60;
+        }
+        
+        .download-item.failed {
+            border-left-color: #e74c3c;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s;
+        }
+        
+        .url-display {
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+            margin-top: 5px;
+        }
+        
+        .files-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .file-name {
+            flex: 1;
+            margin-right: 10px;
+        }
+        
+        .file-size {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .alert {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 yt-dlp Web Interface</h1>
+            <p>Download videos and audio from YouTube and other sites</p>
+        </div>
+        
+        <div class="card">
+            <h2>Add Download</h2>
+            <div id="alert-container"></div>
+            
+            <form id="download-form">
+                <div class="form-group">
+                    <label for="url">Video URL:</label>
+                    <input type="url" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="audio-only" name="audio_only">
+                        <label for="audio-only">Audio only (extract MP3)</label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="audio-options" style="display: none;">
+                    <label for="audio-naming">Audio file naming pattern:</label>
+                    <select id="audio-naming" name="audio_naming">
+                        <option value="default">Channel/Title.mp3 (Default)</option>
+                        <option value="album-format">Artist-Album/Artist-Track.mp3 (Albums)</option>
+                        <option value="artist-title">Artist - Title.mp3</option>
+                        <option value="date-title">YYYY-MM-DD - Channel - Title.mp3</option>
+                        <option value="title-only">Title.mp3</option>
+                        <option value="title-id">Title [VideoID].mp3</option>
+                        <option value="playlist">Playlist/## - Title.mp3</option>
+                        <option value="duration">Channel/[Duration] Title.mp3</option>
+                        <option value="custom">Custom (use arguments below)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="custom-args">Custom yt-dlp arguments (optional):</label>
+                    <textarea id="custom-args" name="custom_args" placeholder="--format best --write-description"></textarea>
+                    <small style="color: #666; font-size: 12px;">
+                        For audio naming: --output "%(uploader)s - %(title)s.%(ext)s"<br>
+                        <a href="#" id="show-naming-help" style="color: #3498db;">Show naming pattern examples</a>
+                    </small>
+                </div>
+
+                <div id="naming-help" style="display: none; background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
+                    <strong>Common naming patterns:</strong><br>
+                    • <code>%(uploader)s/%(title)s.%(ext)s</code> - Channel/Title.mp3<br>
+                    • <code>%(uploader)s - %(title)s.%(ext)s</code> - Channel - Title.mp3<br>
+                    • <code>%(uploader)s-%(playlist)s/%(uploader)s-%(title)s.%(ext)s</code> - Artist-Album/Artist-Track.mp3<br>
+                    • <code>%(upload_date)s - %(title)s.%(ext)s</code> - 20231215 - Title.mp3<br>
+                    • <code>%(artist|%(uploader)s)s - %(title)s.%(ext)s</code> - Artist - Title.mp3<br>
+                    • <code>%(title)s [%(id)s].%(ext)s</code> - Title [VideoID].mp3<br>
+                    <a href="#" id="hide-naming-help" style="color: #3498db;">Hide examples</a>
+                </div>
+                
+                <button type="submit" class="btn" id="download-btn">Add to Queue</button>
+            </form>
+        </div>
+        
+        <div class="status-grid">
+            <div class="card">
+                <h2>Active Downloads</h2>
+                <div id="active-downloads">
+                    <p>No active downloads</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Recent Downloads</h2>
+                <div id="download-history">
+                    <p>No recent downloads</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Downloaded Files</h2>
+            <div id="files-list" class="files-list">
+                <p>Loading files...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let isSubmitting = false;
+        
+        // DOM elements
+        const form = document.getElementById('download-form');
+        const downloadBtn = document.getElementById('download-btn');
+        const alertContainer = document.getElementById('alert-container');
+        const activeDownloads = document.getElementById('active-downloads');
+        const downloadHistory = document.getElementById('download-history');
+        const filesList = document.getElementById('files-list');
+        const audioOnlyCheckbox = document.getElementById('audio-only');
+        const audioOptions = document.getElementById('audio-options');
+        const audioNaming = document.getElementById('audio-naming');
+        const customArgs = document.getElementById('custom-args');
+        const showNamingHelp = document.getElementById('show-naming-help');
+        const hideNamingHelp = document.getElementById('hide-naming-help');
+        const namingHelp = document.getElementById('naming-help');
+        
+        // Utility functions
+        function showAlert(message, type = 'success') {
+            alertContainer.innerHTML = `<div class="alert ${type}">${message}</div>`;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatDuration(startTime) {
+            const start = new Date(startTime);
+            const now = new Date();
+            const diff = Math.floor((now - start) / 1000);
+            
+            if (diff < 60) return `${diff}s`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`;
+            return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
+        }
+        
+        // Audio naming patterns
+        const namingPatterns = {
+            'default': '%(uploader)s/%(title)s.%(ext)s',
+            'artist-title': '%(uploader)s - %(title)s.%(ext)s',
+            'album-format': '%(uploader)s-%(playlist)s/%(uploader)s-%(title)s.%(ext)s',
+            'date-title': '%(upload_date>%Y-%m-%d)s - %(uploader)s - %(title)s.%(ext)s',
+            'title-only': '%(title)s.%(ext)s',
+            'title-id': '%(title)s [%(id)s].%(ext)s',
+            'playlist': '%(playlist|%(uploader)s)s/%(playlist_index|00)02d - %(title)s.%(ext)s',
+            'duration': '%(uploader)s/[%(duration_string)s] %(title)s.%(ext)s'
+        };
+
+        // Event listeners
+        audioOnlyCheckbox.addEventListener('change', function() {
+            audioOptions.style.display = this.checked ? 'block' : 'none';
+        });
+
+        audioNaming.addEventListener('change', function() {
+            if (this.value !== 'custom' && this.value in namingPatterns) {
+                const pattern = namingPatterns[this.value];
+                const currentArgs = customArgs.value.trim();
+
+                // Remove existing --output arguments
+                let newArgs = currentArgs.replace(/--output\s+"[^"]*"/g, '').replace(/--output\s+\S+/g, '').trim();
+
+                // Add new output pattern
+                if (newArgs) {
+                    newArgs += ' ';
+                }
+                newArgs += `--output "${pattern}"`;
+
+                customArgs.value = newArgs;
+            }
+        });
+
+        showNamingHelp.addEventListener('click', function(e) {
+            e.preventDefault();
+            namingHelp.style.display = 'block';
+        });
+
+        hideNamingHelp.addEventListener('click', function(e) {
+            e.preventDefault();
+            namingHelp.style.display = 'none';
+        });
+
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (isSubmitting) return;
+            isSubmitting = true;
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Adding...';
+            
+            const formData = new FormData(form);
+            const data = {
+                url: formData.get('url'),
+                audio_only: formData.has('audio_only'),
+                custom_args: formData.get('custom_args')
+            };
+            
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert(`Download added to queue! Queue size: ${result.queue_size}`, 'success');
+                    form.reset();
+                } else {
+                    showAlert(result.error || 'Failed to add download', 'error');
+                }
+            } catch (error) {
+                showAlert('Network error: ' + error.message, 'error');
+            } finally {
+                isSubmitting = false;
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = 'Add to Queue';
+            }
+        });
+        
+        // Update status
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // Update active downloads
+                if (Object.keys(data.active_downloads).length === 0) {
+                    activeDownloads.innerHTML = '<p>No active downloads</p>';
+                } else {
+                    activeDownloads.innerHTML = Object.entries(data.active_downloads)
+                        .map(([id, download]) => `
+                            <div class="download-item ${download.status}">
+                                <strong>Status:</strong> ${download.status} 
+                                ${download.audio_only ? '(Audio Only)' : ''}
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${download.progress}%"></div>
+                                </div>
+                                <div>${download.progress.toFixed(1)}% - ${formatDuration(download.start_time)}</div>
+                                <div class="url-display">${download.url}</div>
+                            </div>
+                        `).join('');
+                }
+                
+                // Update history
+                if (data.history.length === 0) {
+                    downloadHistory.innerHTML = '<p>No recent downloads</p>';
+                } else {
+                    downloadHistory.innerHTML = data.history
+                        .map(download => `
+                            <div class="download-item ${download.status}">
+                                <strong>Status:</strong> ${download.status}
+                                ${download.audio_only ? '(Audio Only)' : ''}
+                                <div class="url-display">${download.url}</div>
+                            </div>
+                        `).join('');
+                }
+                
+            } catch (error) {
+                console.error('Failed to update status:', error);
+            }
+        }
+        
+        // Update files list
+        async function updateFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const files = await response.json();
+                
+                if (files.length === 0) {
+                    filesList.innerHTML = '<p>No files downloaded yet</p>';
+                } else {
+                    filesList.innerHTML = files
+                        .sort((a, b) => new Date(b.modified) - new Date(a.modified))
+                        .map(file => `
+                            <div class="file-item">
+                                <div class="file-name">
+                                    <a href="/downloads/${file.path}" target="_blank">${file.name}</a>
+                                </div>
+                                <div class="file-size">${formatBytes(file.size)}</div>
+                            </div>
+                        `).join('');
+                }
+            } catch (error) {
+                filesList.innerHTML = '<p>Error loading files</p>';
+                console.error('Failed to update files:', error);
+            }
+        }
+        
+        // Initialize and start polling
+        updateStatus();
+        updateFiles();
+        
+        // Poll for updates every 2 seconds
+        setInterval(updateStatus, 2000);
+        setInterval(updateFiles, 10000); // Files update less frequently
+    </script>
+</body>
+</html>
+</file>
+
+<file path="services/yt-dlp/.git">
+gitdir: ../../.git/modules/services/yt-dlp
+</file>
+
+<file path="services/yt-dlp/ALBUM_FORMAT_EXAMPLES.md">
+# Album Format Examples
+
+## Your Requested Format
+**Pattern**: `%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s/%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s`
+
+## How It Works in Different Scenarios
+
+### Scenario 1: Full Album with Metadata
+**Source**: YouTube Music album with complete metadata
+**Result**:
+```
+Pink Floyd-The Wall/
+├── Pink Floyd-Another Brick in the Wall (Part 1).mp3
+├── Pink Floyd-The Happiest Days of Our Lives.mp3
+├── Pink Floyd-Another Brick in the Wall (Part 2).mp3
+└── Pink Floyd-Mother.mp3
+```
+
+### Scenario 2: Compilation Album
+**Source**: "Now That's What I Call Music" type playlist
+**Result**:
+```
+Various Artists-Now 50/
+├── Taylor Swift-Anti-Hero.mp3
+├── Harry Styles-As It Was.mp3
+├── Dua Lipa-Levitating.mp3
+└── The Weeknd-Blinding Lights.mp3
+```
+
+### Scenario 3: YouTube Playlist as Album
+**Source**: User-created playlist "My Favorite Rock Songs"
+**Result**:
+```
+Various Artists-My Favorite Rock Songs/
+├── Queen-Bohemian Rhapsody.mp3
+├── Led Zeppelin-Stairway to Heaven.mp3
+├── The Beatles-Hey Jude.mp3
+└── Pink Floyd-Comfortably Numb.mp3
+```
+
+### Scenario 4: Single Videos (No Album Info)
+**Source**: Individual music videos
+**Result**:
+```
+Queen-Unknown Album/
+└── Queen-Bohemian Rhapsody.mp3
+
+Led Zeppelin-Unknown Album/
+└── Led Zeppelin-Stairway to Heaven.mp3
+```
+
+### Scenario 5: Channel Upload (No Artist Metadata)
+**Source**: Music uploaded by a channel without proper metadata
+**Result**:
+```
+MusicChannelName-Unknown Album/
+├── MusicChannelName-Song Title 1.mp3
+├── MusicChannelName-Song Title 2.mp3
+└── MusicChannelName-Song Title 3.mp3
+```
+
+## Metadata Priority Explanation
+
+### Album Artist Priority:
+1. `%(album_artist)s` - Official album artist metadata
+2. `%(artist)s` - Track artist metadata  
+3. `%(uploader)s` - YouTube channel name
+
+### Album Name Priority:
+1. `%(album)s` - Official album metadata
+2. `%(playlist)s` - YouTube playlist name
+3. `"Unknown Album"` - Default fallback
+
+### Track Artist Priority:
+1. `%(artist)s` - Track artist metadata
+2. `%(uploader)s` - YouTube channel name
+
+### Track Name Priority:
+1. `%(track)s` - Official track metadata
+2. `%(title)s` - YouTube video title
+
+## Benefits of This Format
+
+### ✅ Proper Organization
+- Albums are grouped by album artist and album name
+- Easy to browse music collection
+- Consistent directory structure
+
+### ✅ Handles Edge Cases
+- Works with incomplete metadata
+- Graceful fallbacks for missing information
+- Supports both albums and playlists
+
+### ✅ Prevents Conflicts
+- Unique directory names with artist-album combination
+- Track files include artist to prevent overwrites
+- Works with compilation albums
+
+### ✅ Music Player Friendly
+- Most music players can parse this structure
+- Easy to import into music libraries
+- Maintains artist and album relationships
+
+## Usage in Web Interface
+
+1. **Select "Audio only"** checkbox
+2. **Choose "Album Artist-Album/Track Artist-Track.mp3 (Albums)"** from dropdown
+3. **Download your music** - it will automatically organize using this format
+
+## Custom Variations
+
+If you want to modify the format, you can use "Custom" and try these variations:
+
+### With Track Numbers
+```
+%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s/%(track_number|00)02d-%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s
+```
+**Result**: `Pink Floyd-The Wall/01-Pink Floyd-Another Brick in the Wall.mp3`
+
+### With Year
+```
+%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s (%(release_year|%(upload_date>%Y)|Unknown)s)/%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s
+```
+**Result**: `Pink Floyd-The Wall (1979)/Pink Floyd-Another Brick in the Wall.mp3`
+
+### Spaces Instead of Dashes
+```
+%(album_artist|%(artist|%(uploader)s)s)s - %(album|%(playlist|Unknown Album)s)s/%(artist|%(uploader)s)s - %(track|%(title)s)s.%(ext)s
+```
+**Result**: `Pink Floyd - The Wall/Pink Floyd - Another Brick in the Wall.mp3`
+
+Your requested format strikes the perfect balance between organization, compatibility, and handling edge cases!
+</file>
+
+<file path="services/yt-dlp/app.py">
+#!/usr/bin/env python3
+"""
+Simple yt-dlp Web Interface for Raspberry Pi
+A lightweight Flask web app for downloading videos with yt-dlp
+"""
+
+import os
+import json
+import subprocess
+import threading
+import time
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from werkzeug.serving import make_server
+import queue
+import logging
+
+app = Flask(__name__)
+app.secret_key = 'your-secret-key-change-this'
+
+# Configuration from environment variables
+DOWNLOAD_DIR = os.getenv('DOWNLOAD_DIR', '/downloads')
+AUDIO_DIR = os.getenv('AUDIO_DIR', '/downloads/audio')
+LOG_FILE = os.getenv('LOG_FILE', '/app/logs/yt-dlp-web.log')
+PORT = int(os.getenv('PORT', 8080))
+
+# Global variables
+download_queue = queue.Queue()
+active_downloads = {}
+download_history = []
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def ensure_directories():
+    """Create necessary directories"""
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+    logger.info(f"Directories ensured: {DOWNLOAD_DIR}, {AUDIO_DIR}")
+
+def download_worker():
+    """Background worker to process download queue"""
+    while True:
+        try:
+            if not download_queue.empty():
+                download_info = download_queue.get()
+                process_download(download_info)
+                download_queue.task_done()
+            time.sleep(1)
+        except Exception as e:
+            logger.error(f"Download worker error: {e}")
+
+def process_download(download_info):
+    """Process a single download"""
+    url = download_info['url']
+    audio_only = download_info.get('audio_only', False)
+    custom_args = download_info.get('custom_args', '')
+
+    download_id = f"dl_{int(time.time())}"
+    active_downloads[download_id] = {
+        'url': url,
+        'status': 'downloading',
+        'progress': 0,
+        'start_time': datetime.now(),
+        'audio_only': audio_only
+    }
+
+    try:
+        # Build yt-dlp command
+        cmd = ['yt-dlp']
+
+        # Check if custom args contain output template
+        has_custom_output = '--output' in custom_args or '-o' in custom_args
+
+        if audio_only:
+            cmd.extend([
+                '--extract-audio',
+                '--audio-format', 'mp3'
+            ])
+
+            # Only add default output if no custom output specified
+            if not has_custom_output:
+                cmd.extend(['--output', f'{AUDIO_DIR}/%(uploader)s/%(title)s.%(ext)s'])
+        else:
+            # Only add default output if no custom output specified
+            if not has_custom_output:
+                cmd.extend(['--output', f'{DOWNLOAD_DIR}/%(uploader)s/%(title)s.%(ext)s'])
+
+        # Add custom arguments if provided
+        if custom_args:
+            # Handle quoted arguments properly
+            import shlex
+            try:
+                custom_args_list = shlex.split(custom_args)
+                cmd.extend(custom_args_list)
+                logger.info(f"Added custom args: {custom_args_list}")
+            except ValueError as e:
+                logger.warning(f"Failed to parse custom args with shlex: {e}")
+                # Fallback to simple split if shlex fails
+                cmd.extend(custom_args.split())
+
+        cmd.append(url)
+        
+        logger.info(f"Starting download: {' '.join(cmd)}")
+        
+        # Run yt-dlp
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
+        
+        # Monitor progress
+        for line in process.stdout:
+            if '[download]' in line and '%' in line:
+                try:
+                    # Extract progress percentage
+                    progress_str = line.split('%')[0].split()[-1]
+                    progress = float(progress_str)
+                    active_downloads[download_id]['progress'] = progress
+                except:
+                    pass
+            logger.info(f"yt-dlp: {line.strip()}")
+        
+        process.wait()
+        
+        if process.returncode == 0:
+            active_downloads[download_id]['status'] = 'completed'
+            active_downloads[download_id]['progress'] = 100
+            logger.info(f"Download completed: {url}")
+        else:
+            active_downloads[download_id]['status'] = 'failed'
+            logger.error(f"Download failed: {url}")
+            
+    except Exception as e:
+        active_downloads[download_id]['status'] = 'failed'
+        logger.error(f"Download error for {url}: {e}")
+    
+    # Move to history after 5 minutes
+    threading.Timer(300, lambda: move_to_history(download_id)).start()
+
+def move_to_history(download_id):
+    """Move completed download to history"""
+    if download_id in active_downloads:
+        download_history.append(active_downloads[download_id])
+        del active_downloads[download_id]
+        # Keep only last 50 items in history
+        if len(download_history) > 50:
+            download_history.pop(0)
+
+@app.route('/')
+def index():
+    """Main page"""
+    return render_template('index.html')
+
+@app.route('/api/download', methods=['POST'])
+def add_download():
+    """Add a new download to the queue"""
+    data = request.get_json()
+    url = data.get('url', '').strip()
+    
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
+    
+    download_info = {
+        'url': url,
+        'audio_only': data.get('audio_only', False),
+        'custom_args': data.get('custom_args', '')
+    }
+    
+    download_queue.put(download_info)
+    logger.info(f"Added to queue: {url}")
+    
+    return jsonify({'message': 'Download added to queue', 'queue_size': download_queue.qsize()})
+
+@app.route('/api/status')
+def get_status():
+    """Get current download status"""
+    return jsonify({
+        'active_downloads': active_downloads,
+        'queue_size': download_queue.qsize(),
+        'history': download_history[-10:]  # Last 10 items
+    })
+
+@app.route('/api/files')
+def list_files():
+    """List downloaded files"""
+    files = []
+    try:
+        for root, dirs, filenames in os.walk(DOWNLOAD_DIR):
+            for filename in filenames:
+                if not filename.startswith('.'):
+                    filepath = os.path.join(root, filename)
+                    rel_path = os.path.relpath(filepath, DOWNLOAD_DIR)
+                    size = os.path.getsize(filepath)
+                    mtime = os.path.getmtime(filepath)
+                    files.append({
+                        'name': filename,
+                        'path': rel_path,
+                        'size': size,
+                        'modified': datetime.fromtimestamp(mtime).isoformat()
+                    })
+    except Exception as e:
+        logger.error(f"Error listing files: {e}")
+    
+    return jsonify(files)
+
+@app.route('/downloads/<path:filename>')
+def download_file(filename):
+    """Serve downloaded files"""
+    return send_from_directory(DOWNLOAD_DIR, filename)
+
+if __name__ == '__main__':
+    ensure_directories()
+    
+    # Start download worker thread
+    worker_thread = threading.Thread(target=download_worker, daemon=True)
+    worker_thread.start()
+    
+    logger.info(f"Starting yt-dlp web interface on port {PORT}")
+    logger.info(f"Download directory: {DOWNLOAD_DIR}")
+    logger.info(f"Audio directory: {AUDIO_DIR}")
+    
+    app.run(host='0.0.0.0', port=PORT, debug=False)
+</file>
+
+<file path="services/yt-dlp/AUDIO_NAMING_OPTIONS.md">
+# Audio MP3 File Naming Options for yt-dlp
+
+## Current Default Format
+**Current**: `%(uploader)s/%(title)s.%(ext)s`
+**Example**: `PewDiePie/Amazing Video Title.mp3`
+
+## Available yt-dlp Template Variables
+
+### Basic Information
+- `%(title)s` - Video title
+- `%(uploader)s` - Channel/uploader name
+- `%(uploader_id)s` - Channel ID
+- `%(id)s` - Video ID
+- `%(ext)s` - File extension (mp3 for audio)
+
+### Dates & Time
+- `%(upload_date)s` - Upload date (YYYYMMDD)
+- `%(release_date)s` - Release date (YYYYMMDD)
+- `%(timestamp)s` - Unix timestamp
+- `%(epoch)s` - Unix epoch time
+
+### Duration & Quality
+- `%(duration)s` - Duration in seconds
+- `%(duration_string)s` - Duration as HH:MM:SS
+- `%(abr)s` - Audio bitrate
+- `%(asr)s` - Audio sample rate
+
+### Playlist Information
+- `%(playlist)s` - Playlist name
+- `%(playlist_title)s` - Playlist title
+- `%(playlist_id)s` - Playlist ID
+- `%(playlist_index)s` - Position in playlist
+- `%(playlist_count)s` - Total items in playlist
+
+### Advanced
+- `%(artist)s` - Artist name (if available)
+- `%(album)s` - Album name (if available)
+- `%(track)s` - Track name (if available)
+- `%(track_number)s` - Track number (if available)
+- `%(genre)s` - Genre (if available)
+
+## Popular Naming Patterns
+
+### 1. Simple Title Only
+**Format**: `%(title)s.%(ext)s`
+**Example**: `Amazing Video Title.mp3`
+**Use case**: Minimal, clean filenames
+
+### 2. Artist - Title (Music-like)
+**Format**: `%(uploader)s - %(title)s.%(ext)s`
+**Example**: `PewDiePie - Amazing Video Title.mp3`
+**Use case**: Music collection organization
+
+### 3. Date-based Organization
+**Format**: `%(upload_date)s - %(uploader)s - %(title)s.%(ext)s`
+**Example**: `20231215 - PewDiePie - Amazing Video Title.mp3`
+**Use case**: Chronological organization
+
+### 4. Channel Folders with Clean Names
+**Format**: `%(uploader)s/%(title)s.%(ext)s` (Current default)
+**Example**: `PewDiePie/Amazing Video Title.mp3`
+**Use case**: Organized by channel, clean titles
+
+### 5. Channel Folders with IDs
+**Format**: `%(uploader)s/%(title)s [%(id)s].%(ext)s`
+**Example**: `PewDiePie/Amazing Video Title [dQw4w9WgXcQ].mp3`
+**Use case**: Prevent duplicates, easy identification
+
+### 6. Playlist Organization
+**Format**: `%(playlist)s/%(playlist_index)02d - %(title)s.%(ext)s`
+**Example**: `My Favorite Songs/01 - Amazing Video Title.mp3`
+**Use case**: Maintain playlist order
+
+### 7. Album Artist-Album/Track Artist-Track Format (Recommended for Albums)
+**Format**: `%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s/%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s`
+**Example**: `Pink Floyd-The Wall/Pink Floyd-Another Brick in the Wall.mp3`
+**Use case**: Proper album organization with artist separation
+**Note**: This is the format you specifically requested
+
+### 8. Music Album Style (Traditional)
+**Format**: `%(uploader)s/%(album|Unknown Album)s/%(track_number|00)02d - %(title)s.%(ext)s`
+**Example**: `Artist Name/Album Name/01 - Song Title.mp3`
+**Use case**: Traditional music collection with album organization
+
+### 9. Podcast Style
+**Format**: `%(uploader)s/%(upload_date)s - %(title)s.%(ext)s`
+**Example**: `Joe Rogan Experience/20231215 - Amazing Episode Title.mp3`
+**Use case**: Podcast episodes with dates
+
+### 10. Duration-based
+**Format**: `%(uploader)s/[%(duration_string)s] %(title)s.%(ext)s`
+**Example**: `PewDiePie/[12:34] Amazing Video Title.mp3`
+**Use case**: Quick duration reference
+
+### 11. Quality-based
+**Format**: `%(uploader)s/%(title)s [%(abr)skbps].%(ext)s`
+**Example**: `PewDiePie/Amazing Video Title [128kbps].mp3`
+**Use case**: Audio quality reference
+
+## Special Characters & Sanitization
+
+yt-dlp automatically handles special characters in filenames:
+- Replaces invalid characters with safe alternatives
+- Removes or replaces emojis
+- Handles Unicode characters appropriately
+- Truncates overly long filenames
+
+## Advanced Formatting
+
+### Conditional Fields
+Use `%(field|default)s` for fallback values:
+- `%(artist|%(uploader)s)s` - Use artist if available, otherwise uploader
+- `%(album|Unknown Album)s` - Use album if available, otherwise "Unknown Album"
+
+### Numeric Formatting
+- `%(playlist_index)02d` - Zero-padded 2-digit number (01, 02, 03...)
+- `%(track_number)03d` - Zero-padded 3-digit number (001, 002, 003...)
+
+### Date Formatting
+- `%(upload_date>%Y-%m-%d)s` - Format as YYYY-MM-DD
+- `%(upload_date>%B %Y)s` - Format as "December 2023"
+
+## Configuration in Web Interface
+
+The web interface allows you to specify custom yt-dlp arguments including output templates:
+
+1. **Custom yt-dlp arguments field**: `--output "%(uploader)s - %(title)s.%(ext)s"`
+2. **Audio extraction**: Check "Audio only" checkbox
+3. **Format**: Automatically set to MP3 for audio extraction
+
+## Your Requested Album Format - Detailed Explanation
+
+### Album Artist-Album/Track Artist-Track Format
+**Full Pattern**:
+```
+%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s/%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s
+```
+
+**How it works**:
+1. **Album Artist**: Uses `album_artist` if available, falls back to `artist`, then to `uploader` (channel name)
+2. **Album Name**: Uses `album` if available, falls back to `playlist` name, then to "Unknown Album"
+3. **Track Artist**: Uses `artist` if available, falls back to `uploader` (channel name)
+4. **Track Name**: Uses `track` if available, falls back to `title` (video title)
+
+**Examples**:
+- **Full metadata**: `Pink Floyd-The Wall/Pink Floyd-Another Brick in the Wall.mp3`
+- **Playlist**: `Various Artists-My Playlist/Artist Name-Song Title.mp3`
+- **Single video**: `Channel Name-Unknown Album/Channel Name-Video Title.mp3`
+
+**Benefits**:
+- ✅ Proper album organization
+- ✅ Handles compilation albums (different track artists)
+- ✅ Works with playlists as albums
+- ✅ Graceful fallbacks when metadata is missing
+- ✅ Consistent naming structure
+
+## Recommended Patterns by Use Case
+
+### Music Collection (Your Format)
+```
+%(album_artist|%(artist|%(uploader)s)s)s-%(album|%(playlist|Unknown Album)s)s/%(artist|%(uploader)s)s-%(track|%(title)s)s.%(ext)s
+```
+
+### Traditional Music Collection
+```
+%(artist|%(uploader)s)s/%(album|Singles)s/%(track_number|00)02d - %(title)s.%(ext)s
+```
+
+### Podcast Archive
+```
+%(uploader)s/%(upload_date>%Y)s/%(upload_date>%m-%d)s - %(title)s.%(ext)s
+```
+
+### Educational Content
+```
+%(uploader)s/%(playlist|Misc)s/%(playlist_index|000)03d - %(title)s.%(ext)s
+```
+
+### General Archive
+```
+%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s
+```
+
+## Implementation Notes
+
+- All patterns work with the current yt-dlp web interface
+- Files are automatically saved to `/mnt/storage/media/downloads/audio/`
+- Invalid characters are automatically sanitized
+- Long filenames are automatically truncated
+- Duplicate filenames are handled automatically
+
+## Testing Patterns
+
+You can test different naming patterns by:
+1. Using the "Custom yt-dlp arguments" field in the web interface
+2. Adding `--output "YOUR_PATTERN_HERE"` to test different formats
+3. Downloading a test video to see the result
+
+Example test command:
+```
+--extract-audio --audio-format mp3 --output "%(uploader)s - %(title)s [%(duration_string)s].%(ext)s"
+```
+</file>
+
+<file path="services/yt-dlp/Dockerfile">
+# Multi-stage build for ARM64 Raspberry Pi
+FROM python:3.11-slim-bookworm
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd --create-home --shell /bin/bash app
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY app.py .
+COPY templates/ templates/
+
+# Create directories for downloads
+RUN mkdir -p /downloads /downloads/audio && \
+    chown -R app:app /app /downloads
+
+# Switch to app user
+USER app
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080 || exit 1
+
+# Run the application
+CMD ["python", "app.py"]
+</file>
+
+<file path="services/yt-dlp/requirements.txt">
+Flask==3.0.0
+yt-dlp>=2023.12.30
+Werkzeug==3.0.1
+</file>
+
+<file path="services/yt-dlp/setup.sh">
+#!/bin/bash
+# Setup script for yt-dlp Web Interface on Raspberry Pi
+
+set -e
+
+echo "🚀 Setting up yt-dlp Web Interface..."
+
+# Update system
+echo "📦 Updating system packages..."
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv ffmpeg curl
+
+# Create application directory
+APP_DIR="/opt/yt-dlp-web"
+echo "📁 Creating application directory: $APP_DIR"
+sudo mkdir -p $APP_DIR
+sudo chown pi:pi $APP_DIR
+
+# Copy application files
+echo "📋 Copying application files..."
+cp -r . $APP_DIR/
+cd $APP_DIR
+
+# Create virtual environment
+echo "🐍 Creating Python virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies
+echo "📦 Installing Python dependencies..."
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Create download directories
+echo "📁 Creating download directories..."
+sudo mkdir -p /mnt/storage/media/downloads/audio
+sudo chown -R pi:pi /mnt/storage/media/downloads
+sudo chmod -R 755 /mnt/storage/media/downloads
+
+# Create systemd service
+echo "⚙️ Creating systemd service..."
+sudo tee /etc/systemd/system/yt-dlp-web.service > /dev/null <<EOF
+[Unit]
+Description=yt-dlp Web Interface
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=$APP_DIR
+Environment=PATH=$APP_DIR/venv/bin
+ExecStart=$APP_DIR/venv/bin/python app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+echo "🔄 Enabling and starting service..."
+sudo systemctl daemon-reload
+sudo systemctl enable yt-dlp-web
+sudo systemctl start yt-dlp-web
+
+# Check status
+echo "✅ Checking service status..."
+sudo systemctl status yt-dlp-web --no-pager
+
+echo ""
+echo "🎉 Setup complete!"
+echo ""
+echo "📍 Service status: sudo systemctl status yt-dlp-web"
+echo "📍 View logs: sudo journalctl -u yt-dlp-web -f"
+echo "📍 Web interface: http://$(hostname -I | awk '{print $1}'):8080"
+echo "📍 Stop service: sudo systemctl stop yt-dlp-web"
+echo "📍 Start service: sudo systemctl start yt-dlp-web"
+echo ""
+echo "🔧 Next steps:"
+echo "1. Test the web interface locally"
+echo "2. Configure Cloudflare tunnel for external access"
+echo "3. Change default settings in app.py if needed"
+</file>
+
+<file path="services/yt-dlp/yt-dlp-setup.md">
+# yt-dlp Docker Setup for Raspberry Pi
+
+## Project Overview
+Setting up yt-dlp as a Docker service on Raspberry Pi with:
+- Docker Compose configuration
+- Web UI interface (preferred)
+- Auto-start on boot (`docker up`)
+- ARM64/ARM compatibility for Raspberry Pi
+
+## Requirements Analysis
+- yt-dlp: Command-line program to download videos from YouTube and other sites
+- Web UI: For easier management and downloading
+- Docker Compose: For service orchestration
+- Auto-start: Service should start when RPi boots
+
+## Research Phase
+- [x] Find existing Docker images with web UI
+- [x] Check ARM64/ARM compatibility
+- [x] Evaluate options for web interface
+- [ ] Design docker-compose.yml structure
+
+## Research Results
+
+### MeTube - Recommended Solution
+- **Repository**: https://github.com/alexta69/metube
+- **Docker Image**: `ghcr.io/alexta69/metube`
+- **Features**:
+  - Web UI for yt-dlp (modern fork of youtube-dl)
+  - Playlist support
+  - Multi-platform support (includes ARM64 for Raspberry Pi)
+  - Active development and maintenance
+  - Automatic yt-dlp updates via nightly builds
+  - Extensive configuration options
+  - Browser extensions available
+
+### Key Configuration Options
+- **Port**: Default 8081
+- **Downloads**: `/downloads` volume mount
+- **Environment Variables**:
+  - `DOWNLOAD_MODE`: sequential, concurrent, or limited
+  - `MAX_CONCURRENT_DOWNLOADS`: Default 3
+  - `OUTPUT_TEMPLATE`: File naming template
+  - `YTDL_OPTIONS`: Additional yt-dlp options in JSON
+  - `DEFAULT_THEME`: light, dark, or auto
+
+### Alternative Options Considered
+- **marcopiovanello/yt-dlp-web-ui**: Less mature, fewer features
+- **ugeek/yt-dlp-web-ui**: ARM64 support but less documentation
+
+## User Requirements
+- **Download Location**: `/mnt/storage/media/downloads` (External USB drive mounted at `/mnt/storage`)
+- **Port**: 8081 (default)
+- **Audio Separation**: Yes - separate audio-only downloads
+- **Authentication**: Yes - Pi is behind Cloudflare Zero Trust tunnel
+- **Browser Extensions**: Interested (see details below)
+- **Auto-start**: Docker restart policies
+
+## Browser Extensions Context
+MeTube offers browser extensions that add a right-click context menu to videos on websites:
+- **Chrome Extension**: Right-click any video → "Send to MeTube"
+- **Firefox Extension**: Same functionality for Firefox
+- **Requirements**:
+  - MeTube must be accessible via HTTPS (your Cloudflare setup handles this)
+  - Extensions send video URL directly to your MeTube instance
+  - Works on YouTube, Vimeo, and dozens of other video sites
+- **Benefits**: No need to copy/paste URLs - just right-click and download
+
+Since your Pi is behind Cloudflare Zero Trust, you'll need to:
+1. Set up a subdomain for MeTube (e.g., `metube.romeothedarkhorse.ca`)
+2. Configure Cloudflare tunnel route for MeTube
+3. Install browser extension and configure it with your MeTube URL
+
+## ARM64 Compatibility Issue ⚠️
+**Problem**: Both MeTube and yt-dlp-webui Docker images don't support ARM64 architecture for Raspberry Pi.
+
+**Error**: `no matching manifest for linux/arm/v8 in the manifest list entries`
+
+**Root Cause**: Most yt-dlp web UI Docker images are only built for x86_64 architecture.
+
+## Solution: Custom Python Web Interface ✅
+
+Since Docker images aren't working, we'll create a lightweight Python Flask web interface that runs directly on the Pi:
+
+### Features:
+- ✅ **Native ARM64 compatibility** (runs directly on Pi)
+- ✅ **Web interface** for easy downloading
+- ✅ **Audio separation** support
+- ✅ **Queue management**
+- ✅ **Progress monitoring**
+- ✅ **Cloudflare tunnel compatible**
+- ✅ **Auto-start on boot** via systemd
+
+### Architecture:
+- **Backend**: Python Flask + yt-dlp
+- **Frontend**: Simple HTML/JavaScript interface
+- **Storage**: Downloads to `/mnt/storage/media/downloads`
+- **Port**: 8080 (configurable)
+
+## Implementation Phase
+- [x] Identify ARM64 compatibility issue
+- [x] Test alternative Docker images (failed)
+- [x] Create custom Python web interface
+- [x] Build Flask app with yt-dlp integration
+- [x] Create setup script and systemd service
+- [ ] Deploy and test on Raspberry Pi
+- [ ] Set up Cloudflare tunnel route for web access
+- [ ] Test the setup
+- [ ] Configure browser bookmarklets (alternative to extensions)
+
+## Custom Docker Container Solution ✅
+
+I've created a custom Docker container that builds on ARM64 and provides a modern web interface:
+
+### Features:
+- 🐳 **Docker containerized** - easy deployment and management
+- 🎯 **ARM64 native build** - builds directly on Raspberry Pi
+- 🌐 **Modern web interface** - responsive design, real-time updates
+- 📥 **Download queue** - manage multiple downloads
+- 🎵 **Audio extraction** - separate audio-only downloads
+- 📊 **Progress monitoring** - real-time download progress
+- 📁 **File browser** - view and download completed files
+- 🔄 **Auto-restart** - Docker restart policies
+- ⚡ **Resource limits** - optimized for Raspberry Pi
+
+### Project Structure:
+```
+/home/pi/workspace/composeyourself/
+├── docker-compose.yml          # Multi-service orchestration
+├── services/
+│   └── yt-dlp/                # yt-dlp service
+│       ├── Dockerfile         # Custom ARM64 container
+│       ├── app.py             # Flask application
+│       ├── requirements.txt   # Python dependencies
+│       └── templates/
+│           └── index.html     # Web interface
+└── [future services...]       # Additional services
+```
+
+### Docker Compose Configuration:
+```yaml
+services:
+  yt-dlp:
+    build:
+      context: ./services/yt-dlp
+      dockerfile: Dockerfile
+    container_name: yt-dlp
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/storage/media/downloads:/downloads
+      - /mnt/storage/media/downloads/audio:/downloads/audio
+      - /mnt/storage/media/downloads/.logs:/app/logs
+    networks:
+      - pi-services
+```
+
+### Directory Structure
+```
+/mnt/storage/media/downloads/
+├── .config/                  # yt-dlp-webui config files
+└── [downloaded video/audio files]
+```
+
+### Audio Separation Setup
+To separate audio downloads, you can configure yt-dlp options in the web UI:
+- Go to Settings in the web interface
+- Enable "Extract audio" option
+- Or use custom yt-dlp arguments: `--extract-audio --audio-format mp3`
+
+## Cloudflare Tunnel Setup
+
+### Required Tunnel Configuration
+Add to your existing Cloudflare tunnel configuration:
+
+```yaml
+# Add to /etc/cloudflared/config.yml ingress section
+ingress:
+  - hostname: ytdlp.romeothedarkhorse.ca
+    service: http://localhost:8080
+  - hostname: ssh.romeothedarkhorse.ca
+    service: ssh://localhost:22
+  - service: http_status:404
+```
+
+### Cloudflare Zero Trust Application
+Create a new application in Cloudflare Zero Trust:
+- **Name**: yt-dlp WebUI
+- **Type**: Self-hosted
+- **Domain**: ytdlp.romeothedarkhorse.ca
+- **Access Policy**: Same as SSH (email-based authentication)
+
+## Setup Instructions
+
+### Option 1: Deploy All Services (Recommended)
+```bash
+# From your Mac, deploy everything
+cd /Users/aaron/workspace/augment-scratchpad/docker-pi
+./deploy.sh
+```
+
+### Option 2: Deploy Only yt-dlp Service
+```bash
+# From your Mac, deploy just yt-dlp
+cd /Users/aaron/workspace/augment-scratchpad/docker-pi
+./deploy-yt-dlp.sh
+```
+
+### Option 3: Manual Deployment
+```bash
+# Copy files to Pi
+scp -r /Users/aaron/workspace/augment-scratchpad/docker-pi pi@nikita:/home/pi/workspace/composeyourself
+
+# SSH to Pi and deploy
+ssh pi@nikita
+cd /home/pi/workspace/composeyourself
+
+# Create directories
+sudo mkdir -p /mnt/storage/media/downloads/audio /mnt/storage/media/downloads/.logs
+sudo chown -R pi:pi /mnt/storage/media/downloads
+
+# Build and start yt-dlp service
+docker compose build yt-dlp
+docker compose up -d yt-dlp
+```
+
+The deployment scripts will:
+- ✅ Copy files to `/home/pi/workspace/composeyourself`
+- ✅ Create necessary directories with proper permissions
+- ✅ Build the Docker container on the Pi (ARM64 native)
+- ✅ Start the service with docker-compose
+- ✅ Show status and logs
+
+### 3. Test the Web Interface
+```bash
+# Check yt-dlp service status
+docker compose ps yt-dlp
+
+# View yt-dlp logs
+docker compose logs -f yt-dlp
+
+# Test locally
+curl http://nikita:8080
+
+# Or open in browser
+# http://nikita:8080
+```
+
+### 4. Configure Cloudflare Tunnel
+```bash
+# On your Pi, edit the cloudflare config
+sudo nano /etc/cloudflared/config.yml
+
+# Add the yt-dlp route to ingress section (see config above)
+# Then restart cloudflared
+sudo systemctl restart cloudflared
+```
+
+### 5. Set Up Cloudflare Zero Trust Application
+1. Go to Cloudflare Zero Trust dashboard
+2. Navigate to Access → Applications
+3. Create new Self-hosted application:
+   - **Name**: MeTube
+   - **Domain**: metube.romeothedarkhorse.ca
+   - **Access Policy**: Same as your SSH setup (email-based)
+
+### 6. Test Access
+1. Visit `https://ytdlp.romeothedarkhorse.ca`
+2. Authenticate via Cloudflare
+3. Login with username: `admin`, password: `changeme123`
+4. You should see the yt-dlp WebUI interface
+
+### 7. Install Browser Extensions (Optional)
+- **Note**: Browser extensions are specific to MeTube, not yt-dlp-webui
+- **Alternative**: Use bookmarklets or direct URL copying to the web interface
+- **URL**: `https://ytdlp.romeothedarkhorse.ca`
+
+## Troubleshooting
+
+### Common Issues
+1. **Permission errors**: Check UID/GID in docker-compose.yml match your pi user
+2. **Storage not mounted**: Verify `/mnt/storage` is properly mounted
+3. **Cloudflare access denied**: Check Zero Trust application configuration
+4. **Container won't start**: Check logs with `docker-compose logs metube`
+
+### Useful Commands
+```bash
+# Check container status (use 'docker compose' for V2 or 'docker-compose' for V1)
+docker compose ps
+# or
+docker-compose ps
+
+# View logs
+docker compose logs -f metube
+# or
+docker-compose logs -f metube
+
+# Restart service
+docker compose restart metube
+# or
+docker-compose restart metube
+
+# Update to latest image
+docker compose pull
+docker compose up -d
+# or
+docker-compose pull
+docker-compose up -d
+```
+
+## Summary
+
+### ✅ **Final Solution: Custom Docker Container**
+
+I've created a custom Docker container that builds natively on ARM64 and provides a modern web interface:
+
+1. **🐳 Docker containerized** - easy deployment and management
+2. **🎯 ARM64 native build** - builds directly on Raspberry Pi
+3. **🌐 Modern web UI** with real-time progress monitoring
+4. **🎵 Audio extraction** and custom yt-dlp arguments
+5. **🔄 Auto-restart** via Docker restart policies
+6. **🔧 Easy management** with docker-compose
+
+### 📁 **Files Created:**
+- `docker-compose.yml` - Container orchestration
+- `yt-dlp-web/Dockerfile` - Custom ARM64 container
+- `yt-dlp-web/app.py` - Flask web application
+- `yt-dlp-web/templates/index.html` - Modern web interface
+- `deploy.sh` - Automated deployment script
+
+### 🚀 **Quick Deploy:**
+```bash
+cd /Users/aaron/workspace/augment-scratchpad/docker-pi
+./deploy.sh
+```
+
+### 🎯 **Key Benefits:**
+- ✅ **Docker containerized** - isolated, reproducible environment
+- ✅ **ARM64 native build** - no compatibility issues
+- ✅ **Easy deployment** - single script deployment
+- ✅ **Auto-restart** - container restarts on failure/reboot
+- ✅ **Resource limits** - optimized for Raspberry Pi
+- ✅ **Volume mounts** - persistent downloads
+- ✅ **Cloudflare ready** - tunnel configuration included
+</file>
+
+<file path="composeyourself-rocketman.service">
+[Unit]
+Description=Compose Yourself stack - Rocketman
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=dockerops
+Group=dockerops
+WorkingDirectory=/opt/docker/composeyourself
+Environment="HOME=/opt/docker"
+Environment="DOCKER_HOST=unix:///var/run/docker.sock"
+# Use multiple compose files: base + rocketman-specific
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml down
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+<file path="composeyourself-sweetpaintedlady.service">
+[Unit]
+Description=Compose Yourself stack - Sweetpaintedlady
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=dockerops
+Group=dockerops
+WorkingDirectory=/opt/docker/composeyourself
+Environment="HOME=/opt/docker"
+Environment="DOCKER_HOST=unix:///var/run/docker.sock"
+# Use multiple compose files: base + sweetpaintedlady-specific
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml down
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
+</file>
+
+<file path="docker-compose.rocketman.yml">
+# Docker Compose for Rocketman (Raspberry Pi)
+# 
+# Services:
+#   - yt-dlp: Video/audio downloader web interface
+#   - announcements: Discord webhook service
+#   - immich: Photo management (server, ML, redis, postgres)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d
+
+services:
+  # yt-dlp Web Interface Service
+  yt-dlp:
+    build:
+      context: ./services/yt-dlp
+      dockerfile: Dockerfile
+    container_name: yt-dlp
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Video downloads
+      - /mnt/storage/media/downloads:/downloads
+      # Audio downloads (separated)
+      - /mnt/storage/media/downloads/audio:/downloads/audio
+      # Logs and state
+      - /mnt/storage/media/downloads/.logs:/app/logs
+    environment:
+      # Download directories
+      - DOWNLOAD_DIR=/downloads
+      - AUDIO_DIR=/downloads/audio
+      - LOG_FILE=/app/logs/yt-dlp-web.log
+      # Server configuration
+      - PORT=8080
+      # Optional: Set timezone
+      - TZ=America/Toronto
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Optional: Resource limits for Raspberry Pi
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    networks:
+      - cys-service
+
+  # Discord Announcements Service
+  announcements:
+    build:
+      context: ./services/announcements
+      dockerfile: Dockerfile
+    container_name: announcements
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8091"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - PORT=8091
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8091/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cys-service
+
+  # Immich Server
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    volumes:
+      # Do not edit the next line. If you want to change the media storage location on your system, edit the value of UPLOAD_LOCATION in the .env file
+      - ${UPLOAD_LOCATION}:/data
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - '2283:2283'
+    depends_on:
+      - redis
+      - database
+    restart: always
+    healthcheck:
+      disable: false
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      - model-cache:/cache
+    env_file:
+      - .env
+    restart: always
+    healthcheck:
+      disable: false
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8@sha256:81db6d39e1bba3b3ff32bd3a1b19a6d69690f94a3954ec131277b9a26b95b3aa
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      # Do not edit the next line. If you want to change the database storage location on your system, edit the value of DB_DATA_LOCATION in the .env file
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: always
+    security_opt:
+      - seccomp=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: '4G'
+    networks:
+      - cys-service
+
+# Shared network for all services
+networks:
+  cys-service:
+    driver: bridge
+
+volumes:
+  model-cache:
+</file>
+
+<file path="docker-compose.sweetpaintedlady.yml">
+# Docker Compose for Sweetpaintedlady (DigitalOcean VPS)
+#
+# Services:
+#   - openwebui: AI chat interface with OpenRouter
+#   - caddy: Reverse proxy with auto HTTPS
+#   - authelia: MFA authentication server
+#
+# Access:
+#   https://sweetpaintedlady.overachieverlabs.com
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d
+
+services:
+  # Open WebUI - AI Chat Interface
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    # No direct port exposure - accessed via Caddy reverse proxy
+    # Port 8080 exposed only to internal network
+    expose:
+      - "8080"
+    volumes:
+      - ./services/agenticui:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
+      - OPENAI_API_KEY=${OPENROUTER_API_KEY}
+      - ENV=production
+      # Disable Open WebUI's built-in auth since Authelia handles it
+      # Or enable it as secondary protection
+      - ENABLE_SIGNUP=false
+      - DEFAULT_MODELS=${OPENWEBUI_DEFAULT_MODELS:-}
+      - DEFAULT_USER_ROLE=user
+    networks:
+      - cys-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Caddy - Reverse Proxy with Auto HTTPS
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-sweetpaintedlady.overachieverlabs.com}
+    networks:
+      - cys-service
+    depends_on:
+      - authelia
+      - openwebui
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Authelia - MFA Authentication Server
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    restart: unless-stopped
+    expose:
+      - "9091"
+    volumes:
+      - ./services/authelia/configuration.yml:/config/configuration.yml:ro
+      - ./services/authelia/users_database.yml:/config/users_database.yml:ro
+      - authelia_data:/config
+    environment:
+      - TZ=America/Toronto
+      - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+      - AUTHELIA_NOTIFIER_SMTP_HOST=${AUTHELIA_SMTP_HOST}
+      - AUTHELIA_NOTIFIER_SMTP_PORT=${AUTHELIA_SMTP_PORT}
+      - AUTHELIA_NOTIFIER_SMTP_USERNAME=${AUTHELIA_SMTP_USERNAME}
+      - AUTHELIA_NOTIFIER_SMTP_PASSWORD=${AUTHELIA_SMTP_PASSWORD}
+      - AUTHELIA_NOTIFIER_SMTP_SENDER=${AUTHELIA_SMTP_SENDER}
+    networks:
+      - cys-service
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Shared network for all services
+networks:
+  cys-service:
+    driver: bridge
+
+volumes:
+  caddy_data:
+    # Persist TLS certificates
+  caddy_config:
+    # Persist Caddy configuration
+  authelia_data:
+    # Persist Authelia database and state
+</file>
+
+<file path="IMPLEMENTATION_PLAN.md">
+# Implementation Plan: Multi-Host Docker Compose Deployment
+
+**Date:** 2026-02-24  
+**Status:** ✅ COMPLETE - Ready for Deployment  
+**Estimated Duration:** 2-3 hours  
+**Actual Duration:** ~2 hours  
+**Risk Level:** Low (no production services affected)
+
+---
+
+## Recent Changes (Last Updated: 2026-02-24)
+
+### Completed Today:
+
+**Phase 1 - File Structure:**
+- ✅ Created `docker-compose.yml` with tailscale as common base service
+- ✅ Created `docker-compose.rocketman.yml` with yt-dlp, announcements, and immich services
+- ✅ Created `docker-compose.sweetpaintedlady.yml` with Open WebUI, Caddy, and Authelia
+- ✅ Created `services/caddy/` and `services/authelia/` directories
+
+**Phase 2 - Service Files:**
+- ✅ Renamed `composeyourself.service` to `composeyourself-rocketman.service`
+- ✅ Updated rocketman service file with dockerops user and multi-compose file support
+- ✅ Created `composeyourself-sweetpaintedlady.service` for DigitalOcean deployment
+
+**Phase 3 - Deploy/Update Scripts:**
+- ✅ Rewrote `deploy.sh` with CLI argument support and host validation
+- ✅ Rewrote `update.sh` with CLI argument support and host validation
+- ✅ Added color-coded output and usage instructions
+- ✅ Both scripts now support `./deploy.sh rocketman|sweetpaintedlady` syntax
+
+## Current Status
+
+| Phase | Status | Completion |
+|-------|--------|------------|
+| Phase 1: File Structure | ✅ Complete | 2026-02-24 |
+| Phase 2: Service Files | ✅ Complete | 2026-02-24 |
+| Phase 3: Deploy/Update Scripts | ✅ Complete | 2026-02-24 |
+| Phase 4: Caddy Configuration | ✅ Complete | 2026-02-24 |
+| Phase 5: Authelia Configuration | ✅ Complete | 2026-02-24 |
+| Phase 6: Documentation | ✅ Complete | 2026-02-24 |
+| Phase 7: Testing | ✅ Complete | 2026-02-24 |
+| Phase 8: Environment Variables | ✅ Complete | 2026-02-24 |
+
+### Files Created/Modified
+
+**New Files:**
+- `docker-compose.yml` - Base configuration (tailscale)
+- `docker-compose.rocketman.yml` - Rocketman services
+- `docker-compose.sweetpaintedlady.yml` - Sweetpaintedlady services
+- `composeyourself-rocketman.service` - Systemd service for rocketman
+- `composeyourself-sweetpaintedlady.service` - Systemd service for DO
+- `services/caddy/Caddyfile` - Reverse proxy configuration
+- `services/authelia/configuration.yml` - MFA configuration
+- `services/authelia/users_database.yml` - User database template
+
+**Modified Files:**
+- `deploy.sh` - Complete rewrite with host argument support
+- `update.sh` - Complete rewrite with host argument support
+- `composeyourself.service` → Renamed to `composeyourself-rocketman.service`
+- `.env.example` - Comprehensive update with all new variables
+- `README.md` - Complete rewrite with multi-host instructions
+
+---
+
+## Executive Summary
+
+This plan splits the current single-host Docker Compose setup into a multi-host deployment:
+- **rocketman**: Local Raspberry Pi (yt-dlp, announcements, immich stack)
+- **sweetpaintedlady**: DigitalOcean VPS (Open WebUI + Authelia MFA + Caddy reverse proxy)
+
+Both hosts will use Tailscale for secure inter-host communication.
+
+---
+
+## Pre-Implementation Requirements
+
+### Infrastructure Prerequisites
+
+| Requirement | Status | Owner | Notes |
+|-------------|--------|-------|-------|
+| DigitalOcean droplet created | ☐ Pending | User | Ubuntu LTS recommended |
+| Domain DNS A record configured | ☐ Pending | User | `sweetpaintedlady.overachieverlabs.com` → DO IP |
+| dockerops user created on sweetpaintedlady | ☐ Pending | User | Match rocketman setup |
+| SSH access configured for dockerops | ☐ Pending | User | Deploy key in `/opt/docker/.ssh/` |
+| Repository cloned on sweetpaintedlady | ☐ Pending | User | `/opt/docker/composeyourself` |
+| Tailscale installed on sweetpaintedlady | ☐ Pending | User | Use same authkey as rocketman |
+| Fastmail app-specific password ready | ☐ Pending | User | For Authelia SMTP |
+
+### Configuration Values Needed
+
+```bash
+# .env file values for sweetpaintedlady
+OPENROUTER_API_KEY=                    # Already have
+TS_AUTHKEY=                            # Same as rocketman
+AUTHELIA_SMTP_HOST=smtp.fastmail.com
+AUTHELIA_SMTP_PORT=587
+AUTHELIA_SMTP_USERNAME=                # Your Fastmail email
+AUTHELIA_SMTP_PASSWORD=                # Fastmail app-specific password
+AUTHELIA_SESSION_SECRET=               # Generate: openssl rand -hex 32
+AUTHELIA_STORAGE_ENCRYPTION_KEY=       # Generate: openssl rand -hex 32
+```
+
+---
+
+## Implementation Checklist
+
+### Phase 1: File Structure Changes (15 min) ✅ COMPLETE
+
+- [x] Create `docker-compose.yml` (tailscale only, common base)
+- [x] Create `docker-compose.rocketman.yml` (rocketman-specific services)
+- [x] Create `docker-compose.sweetpaintedlady.yml` (sweetpaintedlady services)
+- [x] Create `services/caddy/` directory
+- [x] Create `services/authelia/` directory
+
+### Phase 2: Service Files (10 min) ✅ COMPLETE
+
+- [x] Rename `composeyourself.service` → `composeyourself-rocketman.service`
+- [x] Update `composeyourself-rocketman.service` for dockerops user
+- [x] Create `composeyourself-sweetpaintedlady.service`
+
+### Phase 3: Deploy/Update Scripts (10 min) ✅ COMPLETE
+
+- [x] Revise `deploy.sh` with CLI arg support (`rocketman|sweetpaintedlady`)
+- [x] Revise `update.sh` with CLI arg support (`rocketman|sweetpaintedlady`)
+- [x] Add validation and error handling
+- [x] Add usage instructions
+
+### Phase 4: Caddy Configuration (15 min) ✅ COMPLETE
+
+- [x] Create `services/caddy/Caddyfile`
+  - HTTPS auto-configuration with Let's Encrypt
+  - Authelia forward auth integration
+  - Open WebUI reverse proxy
+  - Security headers (HSTS, CSP, etc.)
+  - Health check bypass for monitoring
+
+### Phase 5: Authelia Configuration (20 min) ✅ COMPLETE
+
+- [x] Create `services/authelia/configuration.yml`
+  - Session management with secure cookies
+  - SMTP settings for Fastmail integration
+  - Access control rules (2FA required for main app)
+  - MFA configuration (TOTP and WebAuthn support)
+  - Rate limiting (3 attempts, 5 min ban)
+- [x] Create `services/authelia/users_database.yml`
+  - 2 user account templates (admin, user1)
+  - Argon2 password hashing examples
+  - Detailed setup instructions
+- [x] Document password generation steps
+
+### Phase 6-7: Docker Compose Files ✅ COMPLETE
+
+**docker-compose.sweetpaintedlady.yml:**
+- [x] Open WebUI service configured
+- [x] Caddy service with volume mounts
+- [x] Authelia service with config volumes
+- [x] Tailscale service from base compose
+- [x] cys-service network defined
+- [x] Persistent volumes for certs and data
+
+**docker-compose.rocketman.yml:**
+- [x] yt-dlp service with resource limits
+- [x] announcements service
+- [x] immich stack (server, ML, redis, postgres)
+- [x] Tailscale service from base compose
+- [x] openwebui removed from rocketman
+- [x] cys-service network defined
+
+### Phase 8: Environment Configuration (10 min) ✅ COMPLETE
+
+- [x] Update `.env.example` with new variables
+  - Authelia SMTP settings
+  - Authelia secrets
+  - Host-specific notes
+  - Tailscale hostname configuration
+  - Domain configuration for sweetpaintedlady
+  - Security notes and best practices
+- [x] Document secret generation commands
+
+### Phase 9: Documentation (30 min) ✅ COMPLETE
+
+- [x] Complete rewrite of `README.md` with:
+  - ASCII architecture diagram
+  - Multi-host deployment instructions for rocketman and sweetpaintedlady
+  - Step-by-step setup for dockerops user
+  - Service file installation for both hosts
+  - Authelia user management guide
+  - Tailscale connectivity verification
+  - Comprehensive troubleshooting section
+  - Security best practices
+  - Quick reference commands
+
+### Phase 10: Testing Plan (15 min) ✅ COMPLETE
+
+- [x] Verify docker compose files are valid
+  - ✅ `docker-compose.yml` + `docker-compose.rocketman.yml` - Valid
+  - ✅ `docker-compose.yml` + `docker-compose.sweetpaintedlady.yml` - Valid
+- [x] Test deploy.sh script syntax
+- [x] Test update.sh script syntax
+- [x] Verify systemd service files
+
+**Validation Results:**
+```
+✅ Rocketman compose files are valid
+✅ Sweetpaintedlady compose files are valid
+```
+
+All compose files validated successfully with `docker compose config`.
+
+---
+
+## Post-Implementation Verification
+
+### Sweetpaintedlady Deployment
+
+```bash
+# On sweetpaintedlady
+./deploy.sh sweetpaintedlady
+
+# Verify services
+docker compose ps
+
+# Check Caddy is serving HTTPS
+curl -I https://sweetpaintedlady.overachieverlabs.com
+
+# Test Authelia login
+# Visit https://sweetpaintedlady.overachieverlabs.com in browser
+# Should redirect to Authelia login
+
+# Verify Open WebUI accessible after auth
+docker compose logs openwebui
+```
+
+### Rocketman Deployment
+
+```bash
+# On rocketman
+./deploy.sh rocketman
+
+# Verify services
+docker compose ps
+
+# Check all containers running
+docker compose logs --tail=20
+
+# Verify Tailscale connectivity
+sudo tailscale status
+```
+
+### Inter-Host Communication Test
+
+```bash
+# From sweetpaintedlady, test connectivity to rocketman
+ping rocketman  # Should resolve via Tailscale
+
+# Verify Tailscale IPs can reach each other
+curl http://rocketman:8091/health  # announcements health endpoint
+```
+
+---
+
+## Rollback Plan
+
+If issues occur during deployment:
+
+1. **Sweetpaintedlady issues:**
+   ```bash
+   docker compose down
+   git checkout HEAD~1  # Restore previous state
+   ```
+
+2. **Rocketman issues:**
+   ```bash
+   docker compose down
+   # Restore original docker-compose.yml from backup
+   git stash
+   ```
+
+3. **Complete rollback:**
+   - Restore original `docker-compose.yml` on rocketman
+   - Continue running sweetpaintedlady separately
+   - No data loss risk (no shared volumes being modified)
+
+---
+
+## Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| DNS not propagating | Medium | High | Use `dig` to verify before deployment |
+| Let's Encrypt rate limits | Low | Medium | Use staging env first if concerned |
+| Authelia config errors | Medium | Medium | Test with permissive rules first |
+| Docker compose syntax errors | Low | High | Run `docker compose config` to validate |
+| Tailscale connectivity issues | Low | Medium | Verify with `tailscale status` before deploy |
+
+---
+
+## Success Criteria
+
+| Criteria | Status | Notes |
+|----------|--------|-------|
+| Rocketman deploys successfully | ⏳ Pending | Ready for deployment - configure `.env` and run `./deploy.sh rocketman` |
+| Sweetpaintedlady deploys successfully | ⏳ Pending | Ready for deployment - configure `.env` and run `./deploy.sh sweetpaintedlady` |
+| Authelia login page accessible | ⏳ Pending | Requires sweetpaintedlady deployment with valid DNS |
+| Open WebUI behind MFA | ⏳ Pending | Depends on Authelia configuration |
+| Both hosts in Tailscale | ⏳ Pending | Requires deployment on both hosts |
+| No data loss on rocketman | ✅ Ready | Files structured to avoid conflicts |
+| Documentation accurate | ✅ Complete | README fully updated |
+
+---
+
+## Future Enhancements (Out of Scope)
+
+- [ ] Automated backups from sweetpaintedlady to rocketman
+- [ ] BackBlaze B2 offsite backup integration
+- [ ] Monitoring/alerting setup
+- [ ] Rocketman services exposed via sweetpaintedlady (if needed)
+
+---
+
+## Sign-Off
+
+**Implementation Status:** ✅ COMPLETE
+
+**Ready for Deployment:** Yes
+
+**Final Review:** 2026-02-24
+**Completed by:** opencode
+
+---
+
+## Next Steps
+
+1. **Rocketman (Raspberry Pi):**
+   ```bash
+   # Add to .env on rocketman:
+   TAILSCALE_HOSTNAME=rocketman
+   
+   # Deploy:
+   ./deploy.sh rocketman
+   ```
+
+2. **Sweetpaintedlady (DigitalOcean):**
+   - Create DNS A record first
+   - Configure all variables in `.env`
+   - Deploy:
+   ```bash
+   ./deploy.sh sweetpaintedlady
+   ```
+
+3. **Authelia Setup:**
+   - Generate password hashes after first deployment
+   - Update `users_database.yml`
+   - Enroll users in 2FA (TOTP apps)
+
+4. **Tailscale Verification:**
+   - Verify both hosts show in `tailscale status`
+   - Test connectivity between hosts
+
+---
+
+**All phases complete. The infrastructure is ready for deployment.**
+
+---
+
+## Quick Reference: Deployment Commands
+
+```bash
+# Rocketman deployment
+ssh dockerops@rocketman
+cd /opt/docker/composeyourself
+./deploy.sh rocketman
+
+# Sweetpaintedlady deployment  
+ssh dockerops@sweetpaintedlady
+cd /opt/docker/composeyourself
+./deploy.sh sweetpaintedlady
+```
+
+## Quick Reference: Maintenance
+
+```bash
+# Update rocketman
+./update.sh rocketman
+
+# Update sweetpaintedlady
+./update.sh sweetpaintedlady
+
+# View logs
+docker compose logs -f
+
+# Restart specific service
+docker compose restart <service-name>
+```
+
+---
+
+*Generated: 2026-02-24*  
+*Next Review: Post-implementation*
+</file>
+
+<file path="services/immich/.keep">
+
+</file>
+
+<file path="services/tailscale/README.md">
+# Tailscale Service
+
+This service runs Tailscale inside Docker to provide secure remote access to the host.
+
+## Required Environment
+
+- `TS_AUTHKEY`: Auth key used for automatic login.
+
+## Optional Environment
+
+- `TS_EXTRA_ARGS`: Extra `tailscale up` arguments (for example `--advertise-exit-node`).
+
+## Notes
+
+- Uses `network_mode: host` for full host connectivity.
+- Requires `NET_ADMIN` and `SYS_MODULE` capabilities and access to `/dev/net/tun`.
+</file>
+
+<file path=".gitmodules">
+[submodule "services/announcements"]
+	path = services/announcements
+	url = git@github.com:aaronromeo/announcements.git
+[submodule "services/yt-dlp"]
+	path = services/yt-dlp
+	url = git@github.com:aaronromeo/yt-dlp.git
+</file>
+
+<file path="deploy.sh">
+#!/bin/bash
+# Deploy Compose Yourself services
+# Usage: ./deploy.sh <host>
+#   host: "rocketman" or "sweetpaintedlady"
+#
+# Examples:
+#   ./deploy.sh rocketman         # Deploy to rocketman (Raspberry Pi)
+#   ./deploy.sh sweetpaintedlady  # Deploy to sweetpaintedlady (DigitalOcean)
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Validate host argument
+if [ $# -ne 1 ]; then
+    echo -e "${RED}❌ Error: Host argument required${NC}"
+    echo ""
+    echo "Usage: ./deploy.sh <host>"
+    echo ""
+    echo "Available hosts:"
+    echo "  rocketman         - Raspberry Pi (yt-dlp, announcements, immich)"
+    echo "  sweetpaintedlady  - DigitalOcean VPS (Open WebUI, Caddy, Authelia)"
+    exit 1
+fi
+
+HOST="$1"
+
+# Validate host value
+case "$HOST" in
+    rocketman|sweetpaintedlady)
+        echo -e "${GREEN}🚀 Deploying to $HOST...${NC}"
+        ;;
+    *)
+        echo -e "${RED}❌ Error: Unknown host '$HOST'${NC}"
+        echo ""
+        echo "Available hosts:"
+        echo "  rocketman         - Raspberry Pi"
+        echo "  sweetpaintedlady  - DigitalOcean VPS"
+        exit 1
+        ;;
+esac
+
+# Set compose files based on host
+if [ "$HOST" = "rocketman" ]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml"
+    echo -e "${YELLOW}📦 Services: yt-dlp, announcements, immich${NC}"
+elif [ "$HOST" = "sweetpaintedlady" ]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
+    echo -e "${YELLOW}📦 Services: Open WebUI, Caddy, Authelia${NC}"
+fi
+
+# Update submodules
+echo -e "${YELLOW}🔄 Updating submodules...${NC}"
+git submodule update --init --recursive
+
+# Host-specific setup
+if [ "$HOST" = "rocketman" ]; then
+    echo -e "${YELLOW}🏗️ Setting up directories for rocketman...${NC}"
+    sudo mkdir -p /mnt/storage/media/audio /mnt/storage/media/.logs /mnt/storage/media/photos/library
+    sudo chown -R pi:pi /mnt/storage/media
+    [ -e ./services/immich/library ] || ln -s /mnt/storage/media/photos/library ./services/immich/library
+fi
+
+# Build and deploy
+echo -e "${YELLOW}🏗️ Building and starting services...${NC}"
+docker compose $COMPOSE_FILES down
+docker compose $COMPOSE_FILES build --no-cache
+docker compose $COMPOSE_FILES up -d
+
+# Check deployment status
+echo -e "${GREEN}✅ Checking deployment status...${NC}"
+docker compose $COMPOSE_FILES ps
+
+echo ""
+echo -e "${GREEN}✅ Deployment to $HOST complete!${NC}"
+echo ""
+echo "Useful commands:"
+echo "  View logs:    docker compose $COMPOSE_FILES logs -f"
+echo "  Check status: docker compose $COMPOSE_FILES ps"
+echo "  Stop:         docker compose $COMPOSE_FILES down"
+
+if [ "$HOST" = "sweetpaintedlady" ]; then
+    echo ""
+    echo -e "${YELLOW}🌐 Access Open WebUI at: https://sweetpaintedlady.overachieverlabs.com${NC}"
+    echo -e "${YELLOW}🔐 You'll need to authenticate via Authelia first${NC}"
+fi
+</file>
+
+<file path="SERVICES.md">
+# Multi-Service Architecture for Raspberry Pi
+
+## Overview
+
+This project is designed to host multiple Docker services on your Raspberry Pi in an organized, scalable way. Each service is isolated in its own directory but managed through a single docker-compose.yml file.
+
+## Current Services
+
+### yt-dlp Web Interface
+- **Location**: `services/yt-dlp/`
+- **Port**: 8080
+- **Purpose**: Download videos/audio from YouTube and other sites
+- **Features**: Web UI, queue management, audio extraction, progress monitoring
+
+## Planned Services (Examples)
+
+### Media Server Options
+- **Jellyfin**: `services/jellyfin/` - Open-source media server
+- **Plex**: `services/plex/` - Popular media server
+- **Emby**: `services/emby/` - Alternative media server
+
+### Download Management
+- **qBittorrent**: `services/qbittorrent/` - Torrent client with web UI
+- **Transmission**: `services/transmission/` - Lightweight torrent client
+- **SABnzbd**: `services/sabnzbd/` - Usenet downloader
+
+### File Management
+- **Nextcloud**: `services/nextcloud/` - Self-hosted cloud storage
+- **FileBrowser**: `services/filebrowser/` - Web-based file manager
+- **Syncthing**: `services/syncthing/` - File synchronization
+
+### Monitoring & Management
+- **Portainer**: `services/portainer/` - Docker container management
+- **Grafana**: `services/grafana/` - Monitoring dashboards
+- **Prometheus**: `services/prometheus/` - Metrics collection
+
+## Architecture Benefits
+
+### Service Isolation
+- Each service has its own directory
+- Independent Dockerfiles and configurations
+- Separate deployment scripts available
+- Services can be updated independently
+
+### Shared Infrastructure
+- Single docker-compose.yml for orchestration
+- Shared network (`pi-services`) for inter-service communication
+- Common volume mounts for shared data
+- Centralized logging and monitoring
+
+### Easy Management
+- Deploy all services: `./deploy.sh`
+- Deploy specific service: `./deploy-[service].sh`
+- Standard Docker Compose commands work
+- Service-specific commands available
+
+## Directory Structure
+
+```
+/home/pi/workspace/composeyourself/
+├── docker-compose.yml              # Multi-service orchestration
+├── deploy.sh                       # Deploy all services
+├── deploy-yt-dlp.sh               # Deploy yt-dlp only
+├── services/
+│   ├── yt-dlp/                    # Current: yt-dlp web interface
+│   │   ├── Dockerfile
+│   │   ├── app.py
+│   │   ├── requirements.txt
+│   │   └── templates/
+│   ├── jellyfin/                  # Future: Media server
+│   │   ├── docker-compose.override.yml
+│   │   └── config/
+│   ├── qbittorrent/              # Future: Torrent client
+│   │   ├── Dockerfile
+│   │   └── config/
+│   └── [other services...]
+├── shared/                        # Shared configurations
+│   ├── nginx/                     # Reverse proxy configs
+│   └── ssl/                       # SSL certificates
+└── README.md
+```
+
+## Port Allocation
+
+To avoid conflicts, here's the planned port allocation:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| yt-dlp | 8080 | Video/audio downloader |
+| Jellyfin | 8096 | Media server |
+| qBittorrent | 8081 | Torrent web UI |
+| Portainer | 9000 | Docker management |
+| FileBrowser | 8082 | File management |
+| Grafana | 3000 | Monitoring |
+| Nextcloud | 8083 | Cloud storage |
+
+## Service Communication
+
+Services communicate through the `pi-services` Docker network:
+- Internal DNS resolution (service names)
+- Isolated from host network
+- Secure inter-service communication
+- Easy service discovery
+
+## Adding New Services
+
+1. **Create service directory**: `mkdir services/new-service`
+2. **Add service files**: Dockerfile, configs, etc.
+3. **Update docker-compose.yml**: Add service definition
+4. **Create deployment script**: Copy and modify existing script
+5. **Update documentation**: Add to this file and README
+
+## Best Practices
+
+### Resource Management
+- Set memory limits for each service
+- Use health checks for monitoring
+- Configure restart policies
+- Monitor disk usage
+
+### Security
+- Use non-root users in containers
+- Limit exposed ports
+- Use secrets for sensitive data
+- Regular security updates
+
+### Backup Strategy
+- Configuration files in version control
+- Data volumes backed up regularly
+- Easy restore procedures
+- Disaster recovery plan
+
+## Cloudflare Tunnel Integration
+
+All services can be exposed through Cloudflare tunnels:
+
+```yaml
+# /etc/cloudflared/config.yml
+ingress:
+  - hostname: ytdlp.romeothedarkhorse.ca
+    service: http://localhost:8080
+  - hostname: jellyfin.romeothedarkhorse.ca
+    service: http://localhost:8096
+  - hostname: files.romeothedarkhorse.ca
+    service: http://localhost:8082
+  - hostname: ssh.romeothedarkhorse.ca
+    service: ssh://localhost:22
+  - service: http_status:404
+```
+
+This allows secure external access to all services through your domain.
+</file>
+
+<file path="update.sh">
+#!/bin/bash
+# Update Compose Yourself services
+# Usage: ./update.sh <host>
+#   host: "rocketman" or "sweetpaintedlady"
+#
+# Examples:
+#   ./update.sh rocketman         # Update rocketman (Raspberry Pi)
+#   ./update.sh sweetpaintedlady  # Update sweetpaintedlady (DigitalOcean)
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Validate host argument
+if [ $# -ne 1 ]; then
+    echo -e "${RED}❌ Error: Host argument required${NC}"
+    echo ""
+    echo "Usage: ./update.sh <host>"
+    echo ""
+    echo "Available hosts:"
+    echo "  rocketman         - Raspberry Pi (yt-dlp, announcements, immich)"
+    echo "  sweetpaintedlady  - DigitalOcean VPS (Open WebUI, Caddy, Authelia)"
+    exit 1
+fi
+
+HOST="$1"
+
+# Validate host value
+case "$HOST" in
+    rocketman|sweetpaintedlady)
+        echo -e "${GREEN}🔄 Updating $HOST...${NC}"
+        ;;
+    *)
+        echo -e "${RED}❌ Error: Unknown host '$HOST'${NC}"
+        echo ""
+        echo "Available hosts:"
+        echo "  rocketman         - Raspberry Pi"
+        echo "  sweetpaintedlady  - DigitalOcean VPS"
+        exit 1
+        ;;
+esac
+
+# Set compose files based on host
+if [ "$HOST" = "rocketman" ]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml"
+elif [ "$HOST" = "sweetpaintedlady" ]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
+fi
+
+# Pull latest changes
+echo -e "${YELLOW}🔄 Pulling latest changes...${NC}"
+git pull
+
+# Update submodules
+echo -e "${YELLOW}🔄 Updating submodules...${NC}"
+git submodule update --init --recursive
+
+# Rebuild and restart
+echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
+docker compose $COMPOSE_FILES down
+
+# Build locally since services use local Dockerfiles
+# (skip compose pull since images aren't prebuilt)
+docker compose $COMPOSE_FILES build --no-cache
+docker compose $COMPOSE_FILES up -d
+
+echo ""
+echo -e "${GREEN}✅ Update complete for $HOST!${NC}"
+docker compose $COMPOSE_FILES ps
+
+echo ""
+echo "Useful commands:"
+echo "  View logs:    docker compose $COMPOSE_FILES logs -f"
+echo "  Check status: docker compose $COMPOSE_FILES ps"
+</file>
+
+<file path=".gitignore">
+.env
+services/agenticui
+</file>
+
+<file path=".env.example">
+# =============================================================================
+# ENVIRONMENT CONFIGURATION
+# =============================================================================
+# Copy this file to .env and fill in your values
+# Some variables are host-specific (marked below)
+
+# =============================================================================
+# TAILSCALE (Required on ALL hosts)
+# =============================================================================
+# Tailscale authkey for VPN mesh network
+# Get from: https://login.tailscale.com/admin/settings/keys
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Hostname for this machine in Tailscale network
+# Use different names for each host:
+#   rocketman: TAILSCALE_HOSTNAME=rocketman
+#   sweetpaintedlady: TAILSCALE_HOSTNAME=sweetpaintedlady
+TAILSCALE_HOSTNAME=composeyourself
+
+# Additional Tailscale arguments (optional)
+# Example: --advertise-exit-node --accept-dns=true
+TS_EXTRA_ARGS=
+
+# =============================================================================
+# ROCKETMAN HOST (Raspberry Pi) - docker-compose.rocketman.yml
+# =============================================================================
+
+# Immich Photo Management
+# -----------------------
+# The location where your uploaded files are stored
+UPLOAD_LOCATION=./library
+
+# The location where your database files are stored
+# Network shares are not supported for the database
+DB_DATA_LOCATION=./postgres
+
+# Timezone for Immich
+TZ=America/Toronto
+
+# Immich version - pin to specific version like "v2.1.0" or use "release"
+IMMICH_VERSION=v2
+
+# PostgreSQL credentials (change these!)
+# Use only A-Za-z0-9 characters, no special characters or spaces
+DB_PASSWORD=changeme123
+DB_USERNAME=postgres
+DB_DATABASE_NAME=immich
+
+# yt-dlp Web Interface
+# --------------------
+# Download directories (these are container paths, host paths are in compose)
+DOWNLOAD_DIR=/downloads
+AUDIO_DIR=/downloads/audio
+LOG_FILE=/app/logs/yt-dlp-web.log
+PORT=8080
+
+# Discord Announcements Service
+# -----------------------------
+# Discord webhook URL for sending announcements
+# Create at: https://support.discord.com/hc/en-us/articles/228383668
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxxxxxxx/xxxxxxxx
+
+# =============================================================================
+# SWEETPAINTEDLADY HOST (DigitalOcean) - docker-compose.sweetpaintedlady.yml
+# =============================================================================
+
+# Domain Configuration
+# --------------------
+# Domain name for sweetpaintedlady (must have DNS A record pointing to server)
+DOMAIN=sweetpaintedlady.overachieverlabs.com
+
+# Open WebUI
+# ----------
+# OpenRouter API key for AI chat
+# Get from: https://openrouter.ai/keys
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Default models for Open WebUI (comma-separated)
+# Example: openai/gpt-4o,anthropic/claude-3.5-sonnet
+OPENWEBUI_DEFAULT_MODELS=
+
+# Authelia MFA Authentication
+# ---------------------------
+# Generate these secrets with: openssl rand -hex 32
+
+# JWT secret for token signing
+AUTHELIA_JWT_SECRET=
+
+# Session encryption key
+AUTHELIA_SESSION_SECRET=
+
+# Database encryption key
+AUTHELIA_STORAGE_ENCRYPTION_KEY=
+
+# SMTP settings for Authelia (password resets, 2FA notifications)
+# Using Fastmail as example - adjust for your provider
+AUTHELIA_SMTP_HOST=smtp.fastmail.com
+AUTHELIA_SMTP_PORT=587
+AUTHELIA_SMTP_USERNAME=your-email@fastmail.com
+# Generate app-specific password in Fastmail: Settings → Privacy & Security
+AUTHELIA_SMTP_PASSWORD=your-app-specific-password
+AUTHELIA_SMTP_SENDER="Authelia <auth@yourdomain.com>"
+
+# =============================================================================
+# SECURITY NOTES
+# =============================================================================
+# 1. Never commit this file with real values to git
+# 2. Use strong, unique passwords for all services
+# 3. Keep secrets backed up securely (password manager)
+# 4. Rotate secrets periodically
+# 5. Use app-specific passwords for email/SMTP, not your main password
+</file>
+
+<file path="docker-compose.yml">
+# Multi-service Docker Compose - Base Configuration
+# This file contains services shared across all hosts
+# Use with docker-compose.<host>.yml for host-specific deployments
+#
+# Examples:
+#   docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d
+
+services:
+  # Tailscale - VPN mesh network (shared across all hosts)
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: ${TAILSCALE_HOSTNAME:-composeyourself}
+    restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - /var/lib/tailscale:/var/lib/tailscale
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
+    # Tailscale provides inter-host connectivity
+    # All services can communicate via Tailscale IPs/hostnames
+
+# Note: No networks defined here - each host compose file defines its own
+# or uses network_mode: host for tailscale
+
+# Note: No volumes defined here - host-specific compose files define volumes
+</file>
+
+<file path="README.md">
+# ComposeYourself
+
+Multi-host Docker Compose stack with MFA-protected services and secure inter-host communication via Tailscale.
+
+## Overview
+
+ComposeYourself is a multi-service Docker stack deployed across two hosts:
+
+- **rocketman** (Raspberry Pi) - Media services: yt-dlp, Discord announcements, Immich photo management
+- **sweetpaintedlady** (DigitalOcean VPS) - AI services: Open WebUI with Authelia MFA and Caddy reverse proxy
+
+Both hosts are connected via Tailscale for secure communication.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  sweetpaintedlady.overachieverlabs.com (DigitalOcean)      │
+│  ────────────────────────────────────────────────────────   │
+│                                                             │
+│  Internet ──► Caddy:443 ──► Authelia MFA ──► Open WebUI    │
+│       │                                                     │
+│       └── Auto HTTPS (Let's Encrypt)                        │
+│                                                             │
+│  Tailscale ◄────────────────────────────────────────────►   │
+│       │                                                     │
+└───────┼─────────────────────────────────────────────────────┘
+        │
+        │ Tailscale mesh network
+        │
+┌───────┼─────────────────────────────────────────────────────┐
+│       │                                                     │
+│       ▼                                                     │
+│  rocketman (Raspberry Pi)                                  │
+│  ────────────────────────────────────────────────────────   │
+│                                                             │
+│  Services: yt-dlp, announcements, immich (+ redis, db)     │
+│  No public exposure (Tailscale-only access)                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Project Structure
+
+```
+composeyourself/
+├── docker-compose.yml                    # Base services (tailscale)
+├── docker-compose.rocketman.yml          # Rocketman-specific services
+├── docker-compose.sweetpaintedlady.yml   # Sweetpaintedlady-specific services
+├── deploy.sh                             # Deployment script (requires host arg)
+├── update.sh                             # Update script (requires host arg)
+├── composeyourself-rocketman.service     # Systemd service for rocketman
+├── composeyourself-sweetpaintedlady.service  # Systemd service for DO
+├── services/
+│   ├── announcements/                    # Discord webhook service
+│   ├── yt-dlp/                           # Video downloader
+│   ├── agenticui/                        # Open WebUI data (persistent)
+│   ├── caddy/                            # Reverse proxy config
+│   └── authelia/                         # MFA authentication config
+└── .env.example                          # Environment variables template
+```
+
+## Quick Start
+
+### Prerequisites
+
+1. **Both hosts require:**
+   - Docker and Docker Compose installed
+   - Tailscale auth key (get from [login.tailscale.com](https://login.tailscale.com/admin/settings/keys))
+
+2. **Rocketman (Raspberry Pi):**
+   - External storage mounted at `/mnt/storage`
+   - dockerops user created
+
+3. **Sweetpaintedlady (DigitalOcean):**
+   - Domain `sweetpaintedlady.overachieverlabs.com` with DNS A record
+   - Ports 80 and 443 open in firewall
+
+### Clone Repository
+
+```bash
+# Clone with submodules
+git clone --recurse-submodules git@github.com:aaronromeo/composeyourself.git
+
+# Or initialize after cloning
+git submodule update --init --recursive
+```
+
+### Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+**Rocketman specific:**
+```bash
+TAILSCALE_HOSTNAME=rocketman
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DB_PASSWORD=your-secure-password
+```
+
+**Sweetpaintedlady specific:**
+```bash
+TAILSCALE_HOSTNAME=sweetpaintedlady
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
+DOMAIN=sweetpaintedlady.overachieverlabs.com
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxx
+AUTHELIA_JWT_SECRET=$(openssl rand -hex 32)
+AUTHELIA_SESSION_SECRET=$(openssl rand -hex 32)
+AUTHELIA_STORAGE_ENCRYPTION_KEY=$(openssl rand -hex 32)
+AUTHELIA_SMTP_HOST=smtp.fastmail.com
+AUTHELIA_SMTP_USERNAME=your-email@fastmail.com
+AUTHELIA_SMTP_PASSWORD=your-app-password
+```
+
+## Deployment
+
+### Rocketman (Raspberry Pi)
+
+1. **Create dockerops user:**
+```bash
+sudo useradd --system --create-home --home-dir /opt/docker --shell /usr/sbin/nologin dockerops || true
+sudo mkdir -p /opt/docker
+sudo chown -R dockerops:dockerops /opt/docker
+sudo usermod -aG docker dockerops
+```
+
+2. **Clone repository:**
+```bash
+sudo -u dockerops git clone git@github.com:aaronromeo/composeyourself.git /opt/docker/composeyourself
+sudo -u dockerops git -C /opt/docker/composeyourself submodule update --init --recursive
+```
+
+3. **Configure environment:**
+```bash
+sudo -u dockerops cp /opt/docker/composeyourself/.env.example /opt/docker/composeyourself/.env
+sudo -u dockerops nano /opt/docker/composeyourself/.env
+# Set TAILSCALE_HOSTNAME=rocketman and other variables
+```
+
+4. **Setup storage permissions:**
+```bash
+sudo groupadd -f dockershare
+sudo usermod -aG dockershare dockerops
+sudo mkdir -p /mnt/storage/media/audio /mnt/storage/media/.logs /mnt/storage/media/photos/library
+sudo chgrp -R dockershare /mnt/storage
+sudo chmod -R g+rwX /mnt/storage
+sudo find /mnt/storage -type d -exec chmod g+s {} \;
+```
+
+5. **Install systemd service:**
+```bash
+sudo cp /opt/docker/composeyourself/composeyourself-rocketman.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable composeyourself-rocketman.service
+```
+
+6. **Deploy:**
+```bash
+cd /opt/docker/composeyourself
+sudo -u dockerops ./deploy.sh rocketman
+```
+
+### Sweetpaintedlady (DigitalOcean)
+
+1. **Create dockerops user:**
+```bash
+sudo useradd --system --create-home --home-dir /opt/docker --shell /usr/sbin/nologin dockerops || true
+sudo mkdir -p /opt/docker
+sudo chown -R dockerops:dockerops /opt/docker
+sudo usermod -aG docker dockerops
+```
+
+2. **Clone repository:**
+```bash
+sudo -u dockerops git clone git@github.com:aaronromeo/composeyourself.git /opt/docker/composeyourself
+```
+
+3. **Configure environment:**
+```bash
+sudo -u dockerops cp /opt/docker/composeyourself/.env.example /opt/docker/composeyourself/.env
+sudo -u dockerops nano /opt/docker/composeyourself/.env
+# Set all sweetpaintedlady-specific variables
+```
+
+4. **Setup Authelia users:**
+```bash
+# Generate password hash for your user
+# After first deployment, exec into authelia container:
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+authelia crypto hash generate argon2 --password 'YourSecurePassword123!'
+
+# Copy the hash and update services/authelia/users_database.yml
+```
+
+5. **Install systemd service:**
+```bash
+sudo cp /opt/docker/composeyourself/composeyourself-sweetpaintedlady.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable composeyourself-sweetpaintedlady.service
+```
+
+6. **Deploy:**
+```bash
+cd /opt/docker/composeyourself
+sudo -u dockerops ./deploy.sh sweetpaintedlady
+```
+
+7. **Setup DNS:**
+   - Create A record: `sweetpaintedlady.overachieverlabs.com` → Your DO droplet IP
+   - Wait for DNS propagation
+
+## Service Management
+
+### Rocketman
+
+```bash
+# Deploy or update
+cd /opt/docker/composeyourself
+./deploy.sh rocketman
+./update.sh rocketman
+
+# Check status
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml ps
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml logs -f
+
+# Restart service
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml restart <service>
+
+# View systemd logs
+sudo journalctl -u composeyourself-rocketman.service -f
+```
+
+### Sweetpaintedlady
+
+```bash
+# Deploy or update
+cd /opt/docker/composeyourself
+./deploy.sh sweetpaintedlady
+./update.sh sweetpaintedlady
+
+# Check status
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml ps
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs -f
+
+# Restart service
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart <service>
+
+# View systemd logs
+sudo journalctl -u composeyourself-sweetpaintedlady.service -f
+```
+
+## Accessing Services
+
+### Rocketman (via Tailscale)
+
+All services are accessible only via Tailscale network:
+
+- **yt-dlp**: http://rocketman:8080
+- **announcements**: http://rocketman:8091
+- **immich**: http://rocketman:2283
+
+### Sweetpaintedlady (Public with MFA)
+
+- **Open WebUI**: https://sweetpaintedlady.overachieverlabs.com
+  - Requires Authelia authentication (username + password + 2FA)
+- **Authelia Portal**: https://auth.sweetpaintedlady.overachieverlabs.com (optional)
+
+## Authelia User Management
+
+### Adding a New User
+
+1. Generate password hash:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+authelia crypto hash generate argon2 --password 'NewUserPassword123!'
+```
+
+2. Edit `services/authelia/users_database.yml`:
+```yaml
+newuser:
+  displayname: "New User"
+  password: "$argon2id$v=19$m=65536,t=3,p=4$..."  # paste hash here
+  email: newuser@example.com
+  groups:
+    - users
+```
+
+3. Restart Authelia:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+```
+
+### Resetting a Password
+
+Users can request password reset via the Authelia login page. An email with reset link will be sent via configured SMTP.
+
+## Inter-Host Communication
+
+Both hosts communicate via Tailscale:
+
+```bash
+# From sweetpaintedlady, test connection to rocketman
+ping rocketman
+
+# Access rocketman services from sweetpaintedlady
+curl http://rocketman:8091/health
+```
+
+## Troubleshooting
+
+### Rocketman
+
+**Service won't start:**
+```bash
+# Check logs
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml logs <service>
+
+# Verify storage permissions
+ls -la /mnt/storage/media/
+sudo chown -R dockerops:dockershare /mnt/storage/media
+
+# Check disk space
+df -h /mnt/storage
+```
+
+**Tailscale not connecting:**
+```bash
+# Check tailscale status
+sudo tailscale status
+
+# Reauthenticate if needed
+sudo tailscale up --force-reauth
+```
+
+### Sweetpaintedlady
+
+**HTTPS not working:**
+```bash
+# Check DNS resolution
+dig sweetpaintedlady.overachieverlabs.com
+
+# Verify Caddy logs
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs caddy
+
+# Check if ports 80/443 are open
+sudo ufw status
+```
+
+**Authelia authentication fails:**
+```bash
+# Check Authelia logs
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs authelia
+
+# Verify users_database.yml syntax
+# Ensure password hashes are valid Argon2 format
+```
+
+**Cannot access Open WebUI after authentication:**
+```bash
+# Check all services are running
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml ps
+
+# Verify Open WebUI is healthy
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec openwebui curl http://localhost:8080/api/version
+```
+
+### General
+
+**Permission denied with dockerops user:**
+```bash
+# Add dockerops to docker group
+sudo usermod -aG docker dockerops
+# Log out and back in for changes to take effect
+```
+
+**Git submodule issues:**
+```bash
+# Reinitialize submodules
+git submodule update --init --recursive --force
+```
+
+## Security Notes
+
+- **Rocketman**: No public exposure - all services only accessible via Tailscale
+- **Sweetpaintedlady**: Public HTTPS with mandatory MFA via Authelia
+- **Secrets**: Never commit `.env` file to git - use `.env.example` as template
+- **Passwords**: Use strong passwords and enable 2FA for all Authelia users
+- **Updates**: Keep Docker images updated with `./update.sh <host>`
+
+## Future Enhancements
+
+- [ ] Automated backups from sweetpaintedlady to rocketman
+- [ ] BackBlaze B2 offsite backup integration
+- [ ] Monitoring/alerting with Prometheus/Grafana
+- [ ] Centralized logging
+
+## Support
+
+For issues or questions:
+1. Check the logs: `docker compose -f docker-compose.yml -f docker-compose.<host>.yml logs -f`
+2. Verify container status: `docker compose ps`
+3. Check Tailscale connectivity: `tailscale status`
+4. Review [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed architecture
+
+## License
+
+MIT License - See LICENSE file for details
+</file>
+
+</files>

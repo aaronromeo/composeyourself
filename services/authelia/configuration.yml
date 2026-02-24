@@ -1,0 +1,181 @@
+# Authelia Configuration
+# Multi-factor authentication server for Sweetpaintedlady
+#
+# Features:
+#   - File-based user authentication
+#   - TOTP (Time-based One-Time Password) 2FA
+#   - Session management
+#   - SMTP notifications for password resets
+#
+# Documentation: https://www.authelia.com/configuration/
+
+---
+# Server Configuration
+server:
+  host: 0.0.0.0
+  port: 9091
+  path: ""
+  enable_pprof: false
+  enable_expvars: false
+  disable_healthcheck: false
+
+# Log Configuration
+log:
+  level: info
+  format: text
+  file_path: /config/authelia.log
+  keep_stdout: true
+
+# JWT Configuration (signing key from environment)
+identity_validation:
+  reset_password:
+    jwt_lifespan: "5m"
+
+# Default 2FA method
+# Users can choose TOTP or WebAuthn during enrollment
+default_2fa_method: "totp"
+
+# Session Configuration
+# Session secrets are injected via environment variables
+session:
+  name: authelia_session
+  domain: sweetpaintedlady.overachieverlabs.com
+  same_site: lax
+  secret: "{{ env `AUTHELIA_SESSION_SECRET` }}"
+  expiration: 1h
+  inactivity: 5m
+  remember_me_duration: 1M
+
+# Regulation (Rate Limiting)
+# Prevent brute force attacks
+regulation:
+  max_retries: 3
+  find_time: 2m
+  ban_time: 5m
+
+# Storage Configuration
+# Using SQLite for user preferences and authentication logs
+storage:
+  encryption_key: "{{ env `AUTHELIA_STORAGE_ENCRYPTION_KEY` }}"
+  local:
+    path: /config/db.sqlite3
+
+# Notifier Configuration (SMTP for password resets)
+notifier:
+  disable_startup_check: false
+  smtp:
+    host: "{{ env `AUTHELIA_SMTP_HOST` }}"
+    port: "{{ env `AUTHELIA_SMTP_PORT` }}"
+    timeout: 5s
+    username: "{{ env `AUTHELIA_SMTP_USERNAME` }}"
+    password: "{{ env `AUTHELIA_SMTP_PASSWORD` }}"
+    sender: "{{ env `AUTHELIA_SMTP_SENDER` }}"
+    identifier: sweetpaintedlady
+    subject: "[Authelia] {title}"
+    startup_check_address: test@authelia.com
+    disable_require_tls: false
+    disable_html_emails: false
+
+# Authentication Backend (File-based)
+authentication_backend:
+  password_reset:
+    disable: false
+    custom_url: ""
+  file:
+    path: /config/users_database.yml
+    password:
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+# Access Control Rules
+# Define who can access what
+access_control:
+  default_policy: two_factor
+  rules:
+    # Health check endpoint - no auth required
+    - domain: "sweetpaintedlady.overachieverlabs.com"
+      resources:
+        - "^/api/health$"
+        - "^/api/version$"
+      policy: bypass
+    
+    # Main application - require 2FA
+    - domain: "sweetpaintedlady.overachieverlabs.com"
+      policy: two_factor
+    
+    # Authelia portal itself - one_factor (password only) for login page
+    - domain: "auth.sweetpaintedlady.overachieverlabs.com"
+      policy: one_factor
+
+# Password Policy
+password_policy:
+  standard:
+    enabled: false
+    min_length: 8
+    max_length: 0
+    require_uppercase: true
+    require_lowercase: true
+    require_number: true
+    require_special: true
+  zxcvbn:
+    enabled: false
+    min_score: 3
+
+# Privacy
+privacy_policy:
+  enabled: false
+
+# WebAuthn (Hardware key support)
+webauthn:
+  disable: false
+  enable_passkey_login: true
+  display_name: Authelia
+  attestation_conveyance_preference: indirect
+  user_verification: preferred
+  timeout: 60s
+
+# Time-based One-Time Password (TOTP) Configuration
+totp:
+  disable: false
+  issuer: sweetpaintedlady
+  algorithm: sha1
+  digits: 6
+  period: 30
+  skew: 1
+  secret_size: 32
+  allowed_algorithms:
+    - sha1
+    - sha256
+    - sha512
+  allowed_digits:
+    - 6
+  allowed_periods:
+    - 30
+    - 60
+
+# Identity Providers (OIDC - optional)
+identity_providers:
+  oidc:
+    enabled: false
+
+# Telemetry
+telemetry:
+  metrics:
+    enabled: false
+    address: tcp://0.0.0.0:9959
+    buffers:
+      read: 4096
+      write: 4096
+    timeouts:
+      read: 2s
+      write: 2s
+      idle: 30s
+  profiling:
+    enabled: false
+    address: tcp://0.0.0.0:6060
