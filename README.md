@@ -104,12 +104,18 @@ TAILSCALE_HOSTNAME=sweetpaintedlady
 TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
 DOMAIN=sweetpaintedlady.overachieverlabs.com
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxx
-AUTHELIA_JWT_SECRET=$(openssl rand -hex 32)
-AUTHELIA_SESSION_SECRET=$(openssl rand -hex 32)
-AUTHELIA_STORAGE_ENCRYPTION_KEY=$(openssl rand -hex 32)
+
+# Generate these secrets with: openssl rand -hex 32
+AUTHELIA_JWT_SECRET=a1b2c3d4e5f6...(64 hex chars)
+AUTHELIA_SESSION_SECRET=1a2b3c4d5e6f...(64 hex chars)
+AUTHELIA_STORAGE_ENCRYPTION_KEY=9f8e7d6c...(64 hex chars)
+
+# SMTP for password resets (Fastmail example)
 AUTHELIA_SMTP_HOST=smtp.fastmail.com
+AUTHELIA_SMTP_PORT=587
 AUTHELIA_SMTP_USERNAME=your-email@fastmail.com
-AUTHELIA_SMTP_PASSWORD=your-app-password
+AUTHELIA_SMTP_PASSWORD=your-app-specific-password
+AUTHELIA_SMTP_SENDER="Authelia <auth@yourdomain.com>"
 ```
 
 ## Deployment

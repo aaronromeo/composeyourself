@@ -44,9 +44,7 @@ session:
   secret: "{{ env `AUTHELIA_SESSION_SECRET` }}"
   expiration: 1h
   inactivity: 5m
-  remember_me:
-    enabled: true
-    duration: 1M
+  remember_me: 1M
 
 # Regulation (Rate Limiting)
 # Prevent brute force attacks
@@ -66,13 +64,11 @@ storage:
 notifier:
   disable_startup_check: false
   smtp:
-    host: "{{ env `AUTHELIA_SMTP_HOST` }}"
-    port: "{{ env `AUTHELIA_SMTP_PORT` }}"
+    address: "{{ env `AUTHELIA_SMTP_HOST` }}:{{ env `AUTHELIA_SMTP_PORT` }}"
     timeout: 5s
     username: "{{ env `AUTHELIA_SMTP_USERNAME` }}"
     password: "{{ env `AUTHELIA_SMTP_PASSWORD` }}"
     sender: "{{ env `AUTHELIA_SMTP_SENDER` }}"
-    identifier: sweetpaintedlady
     subject: "[Authelia] {title}"
     startup_check_address: test@authelia.com
     disable_require_tls: false
