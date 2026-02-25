@@ -12,12 +12,11 @@
 ---
 # Server Configuration
 server:
-  host: 0.0.0.0
-  port: 9091
-  path: ""
-  enable_pprof: false
-  enable_expvars: false
+  address: "tcp://0.0.0.0:9091"
   disable_healthcheck: false
+  endpoints:
+    enable_pprof: false
+    enable_expvars: false
 
 # Log Configuration
 log:
@@ -29,6 +28,7 @@ log:
 # JWT Configuration (signing key from environment)
 identity_validation:
   reset_password:
+    jwt_secret: "{{ env `AUTHELIA_JWT_SECRET` }}"
     jwt_lifespan: "5m"
 
 # Default 2FA method
@@ -44,7 +44,9 @@ session:
   secret: "{{ env `AUTHELIA_SESSION_SECRET` }}"
   expiration: 1h
   inactivity: 5m
-  remember_me_duration: 1M
+  remember_me:
+    enabled: true
+    duration: 1M
 
 # Regulation (Rate Limiting)
 # Prevent brute force attacks
@@ -137,7 +139,8 @@ webauthn:
   enable_passkey_login: true
   display_name: Authelia
   attestation_conveyance_preference: indirect
-  user_verification: preferred
+  selection_criteria:
+    user_verification: preferred
   timeout: 60s
 
 # Time-based One-Time Password (TOTP) Configuration
@@ -160,15 +163,26 @@ totp:
     - 60
 
 # Identity Providers (OIDC - optional)
-identity_providers:
-  oidc:
-    enabled: false
+# Uncomment and configure if you need OIDC/OAuth2 support
+# identity_providers:
+#   oidc:
+#     hmac_secret: "{{ env `AUTHELIA_OIDC_HMAC_SECRET` }}"
+#     issuer_private_key: |
+#       {{ env `AUTHELIA_OIDC_PRIVATE_KEY` | indent 6 }}
+#     jwks:
+#       - key_id: "rsa"
+#         algorithm: RS256
+#         use: sig
+#         key: |
+#           {{ env `AUTHELIA_OIDC_PRIVATE_KEY` | indent 10 }}
+#     clients: []
+#       # Add OAuth2 clients here
 
 # Telemetry
 telemetry:
   metrics:
     enabled: false
-    address: tcp://0.0.0.0:9959
+    address: "tcp://0.0.0.0:9959"
     buffers:
       read: 4096
       write: 4096
@@ -176,6 +190,7 @@ telemetry:
       read: 2s
       write: 2s
       idle: 30s
-  profiling:
-    enabled: false
-    address: tcp://0.0.0.0:6060
+  # Profiling disabled by default
+  # profiling:
+  #   enabled: false
+  #   address: "tcp://0.0.0.0:6060"
