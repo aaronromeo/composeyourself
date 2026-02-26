@@ -160,7 +160,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable composeyourself-rocketman.service
 ```
 
-6. **Deploy:**
+7. **Deploy:**
 ```bash
 cd /opt/docker/composeyourself
 sudo -u dockerops ./deploy.sh rocketman
@@ -189,29 +189,41 @@ sudo -u dockerops nano /opt/docker/composeyourself/.env
 ```
 
 4. **Setup Authelia users:**
-```bash
-# Generate password hash for your user
-# After first deployment, exec into authelia container:
-docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
-authelia crypto hash generate argon2 --password 'YourSecurePassword123!'
+   > **Default Credentials:** A pre-configured admin user exists:
+   > - Username: `admin`
+   > - Password: `TemporaryPass123!`
+   >
+   > **IMPORTANT:** Change this password immediately after first login!
 
-# Copy the hash and update services/authelia/users_database.yml
-```
+   ```bash
+   # Generate a new password hash (run this after first deployment):
+   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia \
+     authelia crypto hash generate argon2 --password 'YourNewSecurePassword123!'
 
-5. **Install systemd service:**
+   # Update services/authelia/users_database.yml with the new hash, then restart:
+   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+   ```
+
+5. **First Login:**
+   - Go to `https://sweetpaintedlady.overachieverlabs.com`
+   - Login with username `admin` and password `TemporaryPass123!`
+   - Set up 2FA when prompted (Google Authenticator, Authy, etc.)
+   - **Immediately change your password** using the steps above
+
+6. **Install systemd service:**
 ```bash
 sudo cp /opt/docker/composeyourself/composeyourself-sweetpaintedlady.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable composeyourself-sweetpaintedlady.service
 ```
 
-6. **Deploy:**
+7. **Deploy:**
 ```bash
 cd /opt/docker/composeyourself
 sudo -u dockerops ./deploy.sh sweetpaintedlady
 ```
 
-7. **Setup DNS:**
+8. **Setup DNS:**
    - Create A record: `sweetpaintedlady.overachieverlabs.com` → Your DO droplet IP
    - Wait for DNS propagation
 
