@@ -8,6 +8,7 @@
 #   - SMTP notifications for password resets
 #
 # Documentation: https://www.authelia.com/configuration/
+# Environment Variables: https://www.authelia.com/configuration/methods/environment/
 
 ---
 # Server Configuration
@@ -25,10 +26,11 @@ log:
   file_path: /config/authelia.log
   keep_stdout: true
 
-# JWT Configuration (signing key from environment)
+# JWT Configuration
+# Set via AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET env var
 identity_validation:
   reset_password:
-    jwt_secret: "{{ env `AUTHELIA_JWT_SECRET` }}"
+    jwt_secret: "CHANGEME"
     jwt_lifespan: "5m"
 
 # Default 2FA method
@@ -36,12 +38,12 @@ identity_validation:
 default_2fa_method: "totp"
 
 # Session Configuration
-# Session secrets are injected via environment variables
+# Set via AUTHELIA_SESSION_SECRET env var
 session:
   name: authelia_session
   domain: sweetpaintedlady.overachieverlabs.com
   same_site: lax
-  secret: "{{ env `AUTHELIA_SESSION_SECRET` }}"
+  secret: "CHANGEME"
   expiration: 1h
   inactivity: 5m
   remember_me: 1M
@@ -54,21 +56,25 @@ regulation:
   ban_time: 5m
 
 # Storage Configuration
-# Using SQLite for user preferences and authentication logs
+# Set via AUTHELIA_STORAGE_ENCRYPTION_KEY env var
 storage:
-  encryption_key: "{{ env `AUTHELIA_STORAGE_ENCRYPTION_KEY` }}"
+  encryption_key: "CHANGEME"
   local:
     path: /config/db.sqlite3
 
 # Notifier Configuration (SMTP for password resets)
+# ALL VALUES BELOW ARE OVERRIDDEN BY ENVIRONMENT VARIABLES:
+#   AUTHELIA_NOTIFIER_SMTP_HOST, AUTHELIA_NOTIFIER_SMTP_PORT
+#   AUTHELIA_NOTIFIER_SMTP_USERNAME, AUTHELIA_NOTIFIER_SMTP_PASSWORD
+#   AUTHELIA_NOTIFIER_SMTP_SENDER
 notifier:
   disable_startup_check: false
   smtp:
-    address: "{{ env `AUTHELIA_SMTP_HOST` }}:{{ env `AUTHELIA_SMTP_PORT` }}"
+    address: "CHANGEME:587"
     timeout: 5s
-    username: "{{ env `AUTHELIA_SMTP_USERNAME` }}"
-    password: "{{ env `AUTHELIA_SMTP_PASSWORD` }}"
-    sender: "{{ env `AUTHELIA_SMTP_SENDER` }}"
+    username: "CHANGEME"
+    password: "CHANGEME"
+    sender: "CHANGEME"
     subject: "[Authelia] {title}"
     startup_check_address: test@authelia.com
     disable_require_tls: false
@@ -158,22 +164,6 @@ totp:
     - 30
     - 60
 
-# Identity Providers (OIDC - optional)
-# Uncomment and configure if you need OIDC/OAuth2 support
-# identity_providers:
-#   oidc:
-#     hmac_secret: "{{ env `AUTHELIA_OIDC_HMAC_SECRET` }}"
-#     issuer_private_key: |
-#       {{ env `AUTHELIA_OIDC_PRIVATE_KEY` | indent 6 }}
-#     jwks:
-#       - key_id: "rsa"
-#         algorithm: RS256
-#         use: sig
-#         key: |
-#           {{ env `AUTHELIA_OIDC_PRIVATE_KEY` | indent 10 }}
-#     clients: []
-#       # Add OAuth2 clients here
-
 # Telemetry
 telemetry:
   metrics:
@@ -186,7 +176,3 @@ telemetry:
       read: 2s
       write: 2s
       idle: 30s
-  # Profiling disabled by default
-  # profiling:
-  #   enabled: false
-  #   address: "tcp://0.0.0.0:6060"
