@@ -41,12 +41,12 @@ default_2fa_method: "totp"
 # Set via AUTHELIA_SESSION_SECRET env var
 session:
   name: authelia_session
-  domain: sweetpaintedlady.overachieverlabs.com
   same_site: lax
   secret: "CHANGEME"
   expiration: 1h
   inactivity: 5m
   remember_me: 1M
+  # Domain is set via env var: AUTHELIA_SESSION_DOMAIN
 
 # Regulation (Rate Limiting)
 # Prevent brute force attacks
@@ -63,22 +63,14 @@ storage:
     path: /config/db.sqlite3
 
 # Notifier Configuration (SMTP for password resets)
-# ALL VALUES BELOW ARE OVERRIDDEN BY ENVIRONMENT VARIABLES:
-#   AUTHELIA_NOTIFIER_SMTP_HOST, AUTHELIA_NOTIFIER_SMTP_PORT
-#   AUTHELIA_NOTIFIER_SMTP_USERNAME, AUTHELIA_NOTIFIER_SMTP_PASSWORD
+# ALL VALUES CONFIGURED VIA ENVIRONMENT VARIABLES:
+#   AUTHELIA_NOTIFIER_SMTP_ADDRESS
+#   AUTHELIA_NOTIFIER_SMTP_TIMEOUT
+#   AUTHELIA_NOTIFIER_SMTP_USERNAME
+#   AUTHELIA_NOTIFIER_SMTP_PASSWORD
 #   AUTHELIA_NOTIFIER_SMTP_SENDER
 notifier:
   disable_startup_check: false
-  smtp:
-    address: "CHANGEME:587"
-    timeout: 5s
-    username: "CHANGEME"
-    password: "CHANGEME"
-    sender: "CHANGEME"
-    subject: "[Authelia] {title}"
-    startup_check_address: test@authelia.com
-    disable_require_tls: false
-    disable_html_emails: false
 
 # Authentication Backend (File-based)
 authentication_backend:
