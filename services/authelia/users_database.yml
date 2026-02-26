@@ -13,22 +13,24 @@
 
 users:
   # Example user - REPLACE WITH YOUR OWN CREDENTIALS
-  # Password hash below is for 'password123' - CHANGE THIS!
+  # Temporary password: TemporaryPass123! - CHANGE THIS AFTER FIRST LOGIN!
   admin:
     displayname: "Administrator"
-    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
+    # Password: TemporaryPass123! - CHANGE THIS AFTER FIRST LOGIN
+    password: "$argon2id$v=19$m=65536,t=3,p=4$2H0SW05Peb4dZhDAXNT1mg$GScqMIRV79FDiX6JgioQIu9T+xZcIGAYtwNbMunbZFQ"
     email: admin@example.com
     groups:
       - admins
       - users
 
-  # Second user - REPLACE WITH YOUR OWN CREDENTIALS
-  user1:
-    displayname: "User One"
-    password: "$argon2id$v=19$m=65536,t=3,p=4$change$me$please"  # CHANGE THIS!
-    email: user1@example.com
-    groups:
-      - users
+  # Second user - Uncomment and add proper password hash after setup
+  # user1:
+  #   displayname: "User One"
+  #   # Generate hash with: authelia crypto hash generate argon2 --password 'yourpassword'
+  #   password: "GENERATE_HASH_AND_REPLACE"
+  #   email: user1@example.com
+  #   groups:
+  #     - users
 
 # =============================================================================
 # SETUP INSTRUCTIONS
