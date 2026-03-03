@@ -1,2 +1,8 @@
 .env
+.env.*
 services/agenticui
+services/authelia/users_database.yml
+services/authelia/configuration.yml
+*.log
+*.bak
+.DS_Store

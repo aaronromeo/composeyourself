@@ -8,7 +8,7 @@
 #   - Security headers
 
 # The domain is set via environment variable
-{$DOMAIN:sweetpaintedlady.overachieverlabs.com} {
+{$DOMAIN} {
     # Enable logging
     log {
         output file /data/access.log {
@@ -53,7 +53,7 @@
 
     # Route all requests through Authelia for authentication
     forward_auth authelia:9091 {
-        uri /api/verify?rd=https://{$DOMAIN}
+        uri /api/verify?rd=https://auth.{$DOMAIN}
         
         # Copy headers from Authelia response
         copy_headers {
@@ -63,10 +63,10 @@
             Remote-Email Remote-Email
         }
         
-        # If Authelia returns 401/403, show login page
+        # If Authelia returns 401/403, redirect to auth portal
         @error status 401 403
         handle_response @error {
-            redir https://{$DOMAIN}/authelia/?rd={uri}
+            redir https://auth.{$DOMAIN}/?rd={uri}
         }
     }
 
@@ -101,7 +101,7 @@
 }
 
 # Authelia subdomain (optional - for direct access to auth portal)
-auth.{$DOMAIN:sweetpaintedlady.overachieverlabs.com} {
+auth.{$DOMAIN} {
     reverse_proxy authelia:9091 {
         header_up Host {host}
         header_up X-Real-IP {remote}

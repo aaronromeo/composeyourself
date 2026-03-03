@@ -15,7 +15,7 @@ Both hosts are connected via Tailscale for secure communication.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  sweetpaintedlady.overachieverlabs.com (DigitalOcean)      │
+│  <your-domain.com> (DigitalOcean)      │
 │  ────────────────────────────────────────────────────────   │
 │                                                             │
 │  Internet ──► Caddy:443 ──► Authelia MFA ──► Open WebUI    │
@@ -73,7 +73,7 @@ composeyourself/
    - dockerops user created
 
 3. **Sweetpaintedlady (DigitalOcean):**
-   - Domain `sweetpaintedlady.overachieverlabs.com` with DNS A record
+   - Domain `<your-domain.com>` with DNS A record
    - Ports 80 and 443 open in firewall
 
 ### Clone Repository
@@ -102,7 +102,7 @@ DB_PASSWORD=your-secure-password
 ```bash
 TAILSCALE_HOSTNAME=sweetpaintedlady
 TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
-DOMAIN=sweetpaintedlady.overachieverlabs.com
+DOMAIN=<your-domain.com>
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxx
 
 # Generate these secrets with: openssl rand -hex 32
@@ -205,7 +205,7 @@ sudo -u dockerops nano /opt/docker/composeyourself/.env
    ```
 
 5. **First Login:**
-   - Go to `https://sweetpaintedlady.overachieverlabs.com`
+   - Go to `https://<your-domain.com>`
    - Login with username `admin` and password `TemporaryPass123!`
    - Set up 2FA when prompted (Google Authenticator, Authy, etc.)
    - **Immediately change your password** using the steps above
@@ -224,7 +224,7 @@ sudo -u dockerops ./deploy.sh sweetpaintedlady
 ```
 
 8. **Setup DNS:**
-   - Create A record: `sweetpaintedlady.overachieverlabs.com` → Your DO droplet IP
+   - Create A record: `<your-domain.com>` → Your DO droplet IP
    - Wait for DNS propagation
 
 ## Service Management
@@ -279,9 +279,9 @@ All services are accessible only via Tailscale network:
 
 ### Sweetpaintedlady (Public with MFA)
 
-- **Open WebUI**: https://sweetpaintedlady.overachieverlabs.com
+- **Open WebUI**: https://<your-domain.com>
   - Requires Authelia authentication (username + password + 2FA)
-- **Authelia Portal**: https://auth.sweetpaintedlady.overachieverlabs.com (optional)
+- **Authelia Portal**: https://auth.<your-domain.com> (optional)
 
 ## Authelia User Management
 
@@ -355,7 +355,7 @@ sudo tailscale up --force-reauth
 **HTTPS not working:**
 ```bash
 # Check DNS resolution
-dig sweetpaintedlady.overachieverlabs.com
+dig <your-domain.com>
 
 # Verify Caddy logs
 docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs caddy

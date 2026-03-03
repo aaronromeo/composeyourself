@@ -85,6 +85,6 @@ echo "  Stop:         docker compose $COMPOSE_FILES down"
 
 if [ "$HOST" = "sweetpaintedlady" ]; then
     echo ""
-    echo -e "${YELLOW}🌐 Access Open WebUI at: https://sweetpaintedlady.overachieverlabs.com${NC}"
+    echo -e "${YELLOW}🌐 Access Open WebUI at: https://${DOMAIN}${NC}"
     echo -e "${YELLOW}🔐 You'll need to authenticate via Authelia first${NC}"
 fi

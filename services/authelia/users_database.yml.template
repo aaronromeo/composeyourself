@@ -1,24 +1,8 @@
-# Authelia Users Database
-# File-based user authentication
-#
-# IMPORTANT: This file contains sensitive information!
-# - Never commit to git with real passwords
-# - Keep a backup in your password manager
-# - Regenerate with strong passwords before production use
-#
-# To generate a password hash:
-#   docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'yourpassword'
-#
-# Or use the full setup command after Authelia is running
-
 users:
-  # Example user - REPLACE WITH YOUR OWN CREDENTIALS
-  # Temporary password: TemporaryPass123! - CHANGE THIS AFTER FIRST LOGIN!
   admin:
     displayname: "Administrator"
-    # Password: TemporaryPass123! - CHANGE THIS AFTER FIRST LOGIN
     password: "$argon2id$v=19$m=65536,t=3,p=4$2H0SW05Peb4dZhDAXNT1mg$GScqMIRV79FDiX6JgioQIu9T+xZcIGAYtwNbMunbZFQ"
-    email: admin@example.com
+    email: "${AUTHELIA_ADMIN_EMAIL}"
     groups:
       - admins
       - users
@@ -47,14 +31,14 @@ users:
 # 2. Update this file with:
 #    - Real usernames (lowercase, no spaces)
 #    - Generated password hashes
-#    - Real email addresses
+#    - Real email addresses (via AUTHELIA_ADMIN_EMAIL env var)
 #    - Appropriate display names
 #
 # 3. Restart Authelia to pick up changes:
 #    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
 #
 # 4. First login:
-#    - Go to https://sweetpaintedlady.overachieverlabs.com
+#    - Go to https://${DOMAIN}
 #    - Log in with username and password
 #    - You'll be prompted to set up 2FA (TOTP app like Google Authenticator)
 #

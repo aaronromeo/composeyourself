@@ -1,4 +1,4 @@
-# Docker Compose for Sweetpaintedlady (DigitalOcean VPS)
+# Docker Compose for Sweetpaintedlady
 #
 # Services:
 #   - openwebui: AI chat interface with OpenRouter
@@ -6,7 +6,7 @@
 #   - authelia: MFA authentication server
 #
 # Access:
-#   https://sweetpaintedlady.overachieverlabs.com
+#   https://${DOMAIN}
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d
@@ -55,7 +55,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     environment:
-      - DOMAIN=${DOMAIN:-sweetpaintedlady.overachieverlabs.com}
+      - DOMAIN=${DOMAIN}
     networks:
       - cys-service
     depends_on:
@@ -90,6 +90,12 @@ services:
       - AUTHELIA_NOTIFIER_SMTP_USERNAME=${AUTHELIA_SMTP_USERNAME}
       - AUTHELIA_NOTIFIER_SMTP_PASSWORD=${AUTHELIA_SMTP_PASSWORD}
       - AUTHELIA_NOTIFIER_SMTP_SENDER=${AUTHELIA_SMTP_SENDER}
+      - AUTHELIA_ADMIN_EMAIL=${AUTHELIA_ADMIN_EMAIL:-admin@example.com}
+      - WEBUI_AUTH_TRUSTED_EMAIL_HEADER=Remote-Email
+      - WEBUI_AUTH_TRUSTED_NAME_HEADER=Remote-Name
+      - WEBUI_AUTH_TRUSTED_GROUPS_HEADER=Remote-Groups
+      - ENABLE_PASSWORD_AUTH=false
+      - ENABLE_SIGNUP=false
     networks:
       - cys-service
     healthcheck:

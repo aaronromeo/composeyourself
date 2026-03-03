@@ -58,21 +58,23 @@ regulation:
 # Storage Configuration
 # Set via AUTHELIA_STORAGE_ENCRYPTION_KEY env var
 storage:
-  encryption_key: "CHANGEME"
   local:
     path: /config/db.sqlite3
 
-# Notifier Configuration (SMTP for password resets)
-# ALL VALUES CONFIGURED VIA ENVIRONMENT VARIABLES:
-#   AUTHELIA_NOTIFIER_SMTP_ADDRESS
-#   AUTHELIA_NOTIFIER_SMTP_TIMEOUT
-#   AUTHELIA_NOTIFIER_SMTP_USERNAME
-#   AUTHELIA_NOTIFIER_SMTP_PASSWORD
-#   AUTHELIA_NOTIFIER_SMTP_SENDER
+# Notification Configuration
+# Set via AUTHELIA_NOTIFIER_SMTP_* env vars
 notifier:
   disable_startup_check: false
+  smtp:
+    host: "${AUTHELIA_NOTIFIER_SMTP_HOST}"
+    port: ${AUTHELIA_NOTIFIER_SMTP_PORT}
+    username: "${AUTHELIA_NOTIFIER_SMTP_USERNAME}"
+    password: "${AUTHELIA_NOTIFIER_SMTP_PASSWORD}"
+    sender: "${AUTHELIA_NOTIFIER_SMTP_SENDER}"
+    subject: "[Authelia] {title}"
+    startup_check_address: "${AUTHELIA_ADMIN_EMAIL}"
 
-# Authentication Backend (File-based)
+# Authentication Backend
 authentication_backend:
   password_reset:
     disable: false
@@ -95,24 +97,24 @@ access_control:
   default_policy: two_factor
   rules:
     # Health check endpoint - no auth required
-    - domain: "sweetpaintedlady.overachieverlabs.com"
+    - domain: "${DOMAIN}"
       resources:
         - "^/api/health$"
         - "^/api/version$"
       policy: bypass
     
     # Main application - require 2FA
-    - domain: "sweetpaintedlady.overachieverlabs.com"
+    - domain: "${DOMAIN}"
       policy: two_factor
     
     # Authelia portal itself - one_factor (password only) for login page
-    - domain: "auth.sweetpaintedlady.overachieverlabs.com"
+    - domain: "auth.${DOMAIN}"
       policy: one_factor
 
 # Password Policy
 password_policy:
   standard:
-    enabled: false
+    enabled: true
     min_length: 8
     max_length: 0
     require_uppercase: true
@@ -167,4 +169,3 @@ telemetry:
     timeouts:
       read: 2s
       write: 2s
-      idle: 30s
