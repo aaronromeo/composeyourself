@@ -66,8 +66,6 @@ storage:
 notifier:
   disable_startup_check: false
   smtp:
-    host: "${AUTHELIA_NOTIFIER_SMTP_HOST}"
-    port: ${AUTHELIA_NOTIFIER_SMTP_PORT}
     username: "${AUTHELIA_NOTIFIER_SMTP_USERNAME}"
     password: "${AUTHELIA_NOTIFIER_SMTP_PASSWORD}"
     sender: "${AUTHELIA_NOTIFIER_SMTP_SENDER}"
@@ -169,3 +167,77 @@ telemetry:
     timeouts:
       read: 2s
       write: 2s
+
+# Identity Providers (OIDC)
+# OpenID Connect 1.0 Provider Configuration for SSO
+identity_providers:
+  oidc:
+    # Enable OIDC provider
+    enabled: true
+    
+    # Issuer URL (must match your auth subdomain)
+    issuer: "https://auth.${DOMAIN}"
+    
+    # JSON Web Key (JWK) - HMAC secret for signing
+    # Generate with: openssl rand -hex 64
+    # Store in .env: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET
+    hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
+    
+    # Private key for signing tokens (RSA)
+    # Generate with: openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096
+    # Store in .env: AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY
+    issuer_private_key: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY}
+    
+    # CORS settings for cross-origin requests
+    cors:
+      endpoints:
+        - authorization
+        - token
+        - revocation
+        - introspection
+      allowed_origins:
+        - https://${DOMAIN}
+      allowed_origins_from_client_redirect_uris: true
+    
+    # OIDC Client registrations
+    clients:
+      - client_id: openwebui
+        client_name: "Open WebUI - AI Chat Interface"
+        client_secret: ${OPENWEBUI_OIDC_SECRET}
+        
+        # Not a public client (confidential client with secret)
+        public: false
+        
+        # Authorization policy - requires 2FA
+        authorization_policy: two_factor
+        
+        # Scopes to support
+        scopes:
+          - openid
+          - email
+          - profile
+          - groups
+        
+        # OAuth2 grant types
+        grant_types:
+          - authorization_code
+        
+        # Response types
+        response_types:
+          - code
+        
+        # Redirect URIs - must match OpenWebUI callback
+        redirect_uris:
+          - https://${DOMAIN}/oauth/oidc/callback
+        
+        # Token lifespans
+        lifespans:
+          access_token: 1h
+          id_token: 1h
+          refresh_token: 90d
+        
+        # User consent - implicit for first-party app
+        consent_mode: implicit
+        
+        # Token endpoint authentication method
+        token_endpoint_auth_method: client_secret_basic
