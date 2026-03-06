@@ -184,9 +184,9 @@ identity_providers:
     hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
     
     # Private key for signing tokens (RSA)
-    # Generate with: openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096
-    # Store in .env: AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY
-    issuer_private_key: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY}
+    # Mounted as a file from host: ./services/authelia/oidc_private_key.pem
+    # Generate with: openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096 > oidc_private_key.pem
+    issuer_private_key: /config/oidc_private_key.pem
     
     # CORS settings for cross-origin requests
     cors:

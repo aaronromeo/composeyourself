@@ -40,23 +40,12 @@ if [ -z "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET" ]; then
     echo "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET" >> .env
 fi
 
-# Generate RSA private key if not exists
-if [ -z "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY" ]; then
-    echo "Warning: AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY not set in .env"
+# Check for OIDC private key file
+if [ ! -f "services/authelia/oidc_private_key.pem" ]; then
+    echo "Warning: services/authelia/oidc_private_key.pem not found"
     echo "Generating new RSA key..."
-    openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096 > /tmp/oidc_private_key.pem
-    # Store base64 encoded in .env for reference
-    AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY=$(cat /tmp/oidc_private_key.pem)
-    echo "AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_B64=$(cat /tmp/oidc_private_key.pem | base64 -w0)" >> .env
-    echo "Key generated and stored"
-else
-    # Decode from base64 if it exists
-    if [ -n "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_B64" ]; then
-        echo "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_B64" | base64 -d > /tmp/oidc_private_key.pem
-    else
-        # Try to use the existing key directly
-        echo "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY" > /tmp/oidc_private_key.pem
-    fi
+    openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096 > services/authelia/oidc_private_key.pem
+    echo "  ✓ Generated services/authelia/oidc_private_key.pem"
 fi
 
 # Generate users_database.yml
@@ -67,7 +56,7 @@ sed "s|\\\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" \
 
 echo "  ✓ Generated users_database.yml with email: ${AUTHELIA_ADMIN_EMAIL}"
 
-# Generate configuration.yml (first part - before OIDC)
+# Generate configuration.yml
 echo "Generating configuration.yml..."
 cat services/authelia/configuration.yml.template | \
     sed "s|\\\${DOMAIN}|${DOMAIN}|g" | \
@@ -79,12 +68,8 @@ cat services/authelia/configuration.yml.template | \
     sed "s|\\\${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}|${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}|g" \
     > services/authelia/configuration.yml
 
-# Now handle the private key separately (it's multi-line)
-# Read the template again and replace the private key placeholder
-sed -i "/issuer_private_key:/r /tmp/oidc_private_key.pem" services/authelia/configuration.yml
-sed -i "s|issuer_private_key:.*|issuer_private_key:|" services/authelia/configuration.yml
-
 echo "  ✓ Generated configuration.yml with domain: ${DOMAIN}"
 echo "  ✓ OIDC secrets substituted"
+echo "  ✓ Private key file: services/authelia/oidc_private_key.pem"
 
 echo "Done!"
