@@ -59,6 +59,11 @@ git pull
 echo -e "${YELLOW}🔄 Updating submodules...${NC}"
 git submodule update --init --recursive
 
+# Regenerate configuration files (in case templates changed)
+echo -e "${YELLOW}⚙️ Regenerating configuration files...${NC}"
+chmod +x generate_config.sh
+./generate_config.sh
+
 # Rebuild and restart
 echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
 docker compose $COMPOSE_FILES down

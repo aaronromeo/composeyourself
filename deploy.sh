@@ -65,6 +65,11 @@ if [ "$HOST" = "rocketman" ]; then
     [ -e ./services/immich/library ] || ln -s /mnt/storage/media/photos/library ./services/immich/library
 fi
 
+# Generate configuration files from templates
+echo -e "${YELLOW}⚙️ Generating configuration files...${NC}"
+chmod +x generate_config.sh
+./generate_config.sh
+
 # Build and deploy
 echo -e "${YELLOW}🏗️ Building and starting services...${NC}"
 docker compose $COMPOSE_FILES down
