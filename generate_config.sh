@@ -25,29 +25,6 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
-# Check for required OIDC secrets
-if [ -z "$OPENWEBUI_OIDC_SECRET" ]; then
-    echo "Warning: OPENWEBUI_OIDC_SECRET not set in .env"
-    echo "Generating new secret..."
-    OPENWEBUI_OIDC_SECRET=$(openssl rand -hex 32)
-    echo "OPENWEBUI_OIDC_SECRET=$OPENWEBUI_OIDC_SECRET" >> .env
-fi
-
-if [ -z "$AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET" ]; then
-    echo "Warning: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET not set in .env"
-    echo "Generating new secret..."
-    AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$(openssl rand -hex 64)
-    echo "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET" >> .env
-fi
-
-# Check for OIDC private key file
-if [ ! -f "services/authelia/oidc_private_key.pem" ]; then
-    echo "Warning: services/authelia/oidc_private_key.pem not found"
-    echo "Generating new RSA key..."
-    openssl genpkey -algorithm RSA -outform PEM -pkeyopt rsa_keygen_bits:4096 > services/authelia/oidc_private_key.pem
-    echo "  ✓ Generated services/authelia/oidc_private_key.pem"
-fi
-
 # Generate users_database.yml
 echo "Generating users_database.yml..."
 sed "s|\\\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" \
@@ -63,13 +40,9 @@ cat services/authelia/configuration.yml.template | \
     sed "s|\\\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" | \
     sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_USERNAME}|${AUTHELIA_SMTP_USERNAME}|g" | \
     sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_PASSWORD}|${AUTHELIA_SMTP_PASSWORD}|g" | \
-    sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_SENDER}|${AUTHELIA_SMTP_SENDER}|g" | \
-    sed "s|\\\${OPENWEBUI_OIDC_SECRET}|${OPENWEBUI_OIDC_SECRET}|g" | \
-    sed "s|\\\${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}|${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}|g" \
+    sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_SENDER}|${AUTHELIA_SMTP_SENDER}|g" \
     > services/authelia/configuration.yml
 
 echo "  ✓ Generated configuration.yml with domain: ${DOMAIN}"
-echo "  ✓ OIDC secrets substituted"
-echo "  ✓ Private key file: services/authelia/oidc_private_key.pem"
 
 echo "Done!"

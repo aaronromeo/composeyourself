@@ -53,6 +53,12 @@ elif [ "$HOST" = "sweetpaintedlady" ]; then
     echo -e "${YELLOW}📦 Services: Open WebUI, Caddy, Authelia${NC}"
 fi
 
+# Load DOMAIN from .env for display
+if [ -f .env ]; then
+    DOMAIN=$(grep -E '^DOMAIN=' .env | cut -d'=' -f2-)
+    export DOMAIN
+fi
+
 # Update submodules
 echo -e "${YELLOW}🔄 Updating submodules...${NC}"
 git submodule update --init --recursive
