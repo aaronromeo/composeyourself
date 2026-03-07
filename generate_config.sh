@@ -25,6 +25,8 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
+OAUTH_CLIENT_SECRET_DIGEST=$(docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2 --password ${OAUTH_CLIENT_SECRET} --no-confirm | sed -e "s|Digest: ||")
+
 # Generate users_database.yml
 echo "Generating users_database.yml..."
 sed "s|\\\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" \
@@ -37,6 +39,8 @@ echo "  ✓ Generated users_database.yml with email: ${AUTHELIA_ADMIN_EMAIL}"
 echo "Generating configuration.yml..."
 cat services/authelia/configuration.yml.template | \
     sed "s|\\\${DOMAIN}|${DOMAIN}|g" | \
+    sed "s|\\\${SUBDOMAIN}|${SUBDOMAIN}|g" | \
+    sed "s|\\\${OAUTH_CLIENT_SECRET_DIGEST}|${OAUTH_CLIENT_SECRET_DIGEST}|g" | \    
     sed "s|\\\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" | \
     sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_USERNAME}|${AUTHELIA_SMTP_USERNAME}|g" | \
     sed "s|\\\${AUTHELIA_NOTIFIER_SMTP_PASSWORD}|${AUTHELIA_SMTP_PASSWORD}|g" | \
