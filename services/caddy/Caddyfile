@@ -1,0 +1,108 @@
+# Caddyfile for Sweetpaintedlady
+# Reverse proxy with Authelia MFA authentication
+#
+# Features:
+#   - Automatic HTTPS via Let's Encrypt
+#   - Authelia forward authentication
+#   - Open WebUI reverse proxy
+#   - Security headers
+
+# The domain is set via environment variable
+{$SUBDOMAIN}.{$DOMAIN} {
+    # Enable logging
+    log {
+        output file /data/access.log {
+            roll_size 10MB
+            roll_keep 10
+        }
+        format json
+    }
+
+    # Security headers
+    header {
+        # Enable HTTP Strict Transport Security (HSTS)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        
+        # Content Security Policy (adjust as needed)
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+        
+        # Remove server header
+        -Server
+    }
+
+    # Handle ACME challenges (for Let's Encrypt)
+    # This is automatic in Caddy, but explicit for clarity
+    
+    # Forward authentication to Authelia
+    @auth_required {
+        not path /api/health
+        not path /api/version
+    }
+
+    # Route all requests through Authelia for authentication
+    forward_auth authelia:9091 {
+        # uri /api/verify?rd=https://auth.{$DOMAIN}
+        uri /api/authz/forward-auth
+        
+        # Copy headers from Authelia response
+        copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+        
+        # If Authelia returns 401/403, redirect to auth portal
+        @error status 401 403
+        handle_response @error {
+            redir https://auth.{$DOMAIN}/?rd={uri}
+        }
+    }
+
+    # Reverse proxy to Open WebUI
+    reverse_proxy openwebui:8080 {
+        # Health check
+        health_uri /api/version
+        health_interval 30s
+        health_timeout 10s
+        
+        # Pass headers to backend
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        
+        # Pass Authelia headers to Open WebUI
+        header_up Remote-User {http.request.header.Remote-User}
+        header_up Remote-Groups {http.request.header.Remote-Groups}
+        header_up Remote-Name {http.request.header.Remote-Name}
+        header_up Remote-Email {http.request.header.Remote-Email}
+        
+        # Connection limits
+        transport http {
+            # Keep connections alive for better performance
+            keepalive 120s
+            # Connection timeout
+            dial_timeout 30s
+        }
+    }
+}
+
+# Authelia subdomain (optional - for direct access to auth portal)
+auth.{$DOMAIN} {
+    reverse_proxy authelia:9091 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+}

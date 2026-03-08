@@ -1,41 +1,83 @@
 # ComposeYourself
 
-ComposeYourself is a multi-service Docker stack for a Raspberry Pi (or any Linux host) designed for easy expansion with additional services.
+Multi-host Docker Compose stack with MFA-protected services and secure inter-host communication via Tailscale.
 
-## Current Services
+## Overview
 
-See `docker-compose.yml` for the active service list. Services may be added/removed over time.
+ComposeYourself is a multi-service Docker stack deployed across two hosts:
 
-- `yt-dlp` on `http://<host>:8080`
-- `announcements` on `127.0.0.1:8091`
-- `immich-server` on `http://<host>:2283`
-- `openwebui` on `http://127.0.0.1:3000`
+- **rocketman** (Raspberry Pi) - Media services: yt-dlp, Discord announcements, Immich photo management
+- **sweetpaintedlady** (DigitalOcean VPS) - AI services: Open WebUI with Authelia MFA and Caddy reverse proxy
+
+Both hosts are connected via Tailscale for secure communication.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  <your-domain.com> (DigitalOcean)      │
+│  ────────────────────────────────────────────────────────   │
+│                                                             │
+│  Internet ──► Caddy:443 ──► Authelia MFA ──► Open WebUI    │
+│       │                                                     │
+│       └── Auto HTTPS (Let's Encrypt)                        │
+│                                                             │
+│  Tailscale ◄────────────────────────────────────────────►   │
+│       │                                                     │
+└───────┼─────────────────────────────────────────────────────┘
+        │
+        │ Tailscale mesh network
+        │
+┌───────┼─────────────────────────────────────────────────────┐
+│       │                                                     │
+│       ▼                                                     │
+│  rocketman (Raspberry Pi)                                  │
+│  ────────────────────────────────────────────────────────   │
+│                                                             │
+│  Services: yt-dlp, announcements, immich (+ redis, db)     │
+│  No public exposure (Tailscale-only access)                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Project Structure
 
-This repo uses Git submodules for some services. Make sure to initialize them before building or deploying.
-
 ```
-/home/pi/workspace/composeyourself/
-├── docker-compose.yml          # Multi-service orchestration
+composeyourself/
+├── docker-compose.yml                    # Base services (tailscale)
+├── docker-compose.rocketman.yml          # Rocketman-specific services
+├── docker-compose.sweetpaintedlady.yml   # Sweetpaintedlady-specific services
+├── deploy.sh                             # Deployment script (requires host arg)
+├── update.sh                             # Update script (requires host arg)
+├── composeyourself-rocketman.service     # Systemd service for rocketman
+├── composeyourself-sweetpaintedlady.service  # Systemd service for DO
 ├── services/
-│   ├── agenticui/              # Open WebUI persistent data
-│   ├── announcements/         # Service submodule
-│   └── yt-dlp/                 # Service submodule
-└── [future services...]       # Additional services go here
+│   ├── announcements/                    # Discord webhook service
+│   ├── yt-dlp/                           # Video downloader
+│   ├── agenticui/                        # Open WebUI data (persistent)
+│   ├── caddy/                            # Reverse proxy config
+│   └── authelia/                         # MFA authentication config
+└── .env.example                          # Environment variables template
 ```
-
-## Service Organization
-
-Each service is organized in its own directory under `services/`:
-- **Isolated builds** - Each service has its own Dockerfile
-- **Independent deployment** - Services can be deployed/updated separately
-- **Shared networking** - All services use the `pi-services` network
-- **Centralized orchestration** - Single docker-compose.yml manages all services
 
 ## Quick Start
 
-### Submodules
+### Prerequisites
+
+1. **Both hosts require:**
+   - Docker and Docker Compose installed
+   - Tailscale auth key (get from [login.tailscale.com](https://login.tailscale.com/admin/settings/keys))
+
+2. **Rocketman (Raspberry Pi):**
+   - External storage mounted at `/mnt/storage`
+   - dockerops user created
+
+3. **Sweetpaintedlady (DigitalOcean):**
+   - Domain `<your-domain.com>` with DNS A record
+   - Ports 80 and 443 open in firewall
+
+### Clone Repository
+
 ```bash
 # Clone with submodules
 git clone --recurse-submodules git@github.com:aaronromeo/composeyourself.git
@@ -44,245 +86,340 @@ git clone --recurse-submodules git@github.com:aaronromeo/composeyourself.git
 git submodule update --init --recursive
 ```
 
-### Deploy All Services
+### Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+**Rocketman specific:**
 ```bash
-# Deploy everything with one command
-./deploy.sh
+TAILSCALE_HOSTNAME=rocketman
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DB_PASSWORD=your-secure-password
 ```
 
-### Deploy Specific Service (yt-dlp)
+**Sweetpaintedlady specific:**
 ```bash
-# Deploy only a specific service
-docker compose up -d <service-name>
-```
+TAILSCALE_HOSTNAME=sweetpaintedlady
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
+DOMAIN=<your-domain.com>
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxx
 
-### Manual Deployment
-```bash
-# Copy files to Pi
-scp -r . pi@nikita:/home/pi/workspace/composeyourself
+# Generate these secrets with: openssl rand -hex 32
+AUTHELIA_JWT_SECRET=a1b2c3d4e5f6...(64 hex chars)
+AUTHELIA_SESSION_SECRET=1a2b3c4d5e6f...(64 hex chars)
+AUTHELIA_STORAGE_ENCRYPTION_KEY=9f8e7d6c...(64 hex chars)
 
-# SSH to Pi and deploy
-ssh pi@nikita
-cd /home/pi/workspace/composeyourself
-
-# Create directories
-sudo mkdir -p /mnt/storage/media/downloads/audio /mnt/storage/media/downloads/.logs
-sudo chown -R pi:pi /mnt/storage/media/downloads
-
-# Build and start all services
-docker compose build
-docker compose up -d
-
-# Or start a specific service
-docker compose up -d <service-name>
-```
-
-### Pull the latest
-```bash
-sudo -u dockerops git -C /opt/docker/composeyourself pull
-sudo -u dockerops git -C /opt/docker/composeyourself submodule update --init --recursive
-./update.sh
+# SMTP for password resets (Fastmail example)
+AUTHELIA_SMTP_HOST=smtp.fastmail.com
+AUTHELIA_SMTP_PORT=587
+AUTHELIA_SMTP_USERNAME=your-email@fastmail.com
+AUTHELIA_SMTP_PASSWORD=your-app-specific-password
+AUTHELIA_SMTP_SENDER="Authelia <auth@yourdomain.com>"
 ```
 
 ## Deployment
 
-1. Create a dedicated service account
+### Rocketman (Raspberry Pi)
+
+1. **Create dockerops user:**
 ```bash
 sudo useradd --system --create-home --home-dir /opt/docker --shell /usr/sbin/nologin dockerops || true
 sudo mkdir -p /opt/docker
 sudo chown -R dockerops:dockerops /opt/docker
+sudo usermod -aG docker dockerops
 ```
 
-2. Create an SSH key for dockerops
-```bash
-sudo -u dockerops ssh-keygen -t ed25519 -C "dockerops@rocketman" -f /opt/docker/.ssh/id_ed25519
-sudo -u dockerops cat /opt/docker/.ssh/id_ed25519.pub
-```
-
-3. Add that key in GitHub → Settings → SSH and GPG keys.
-
-4. Clone using SSH
+2. **Clone repository:**
 ```bash
 sudo -u dockerops git clone git@github.com:aaronromeo/composeyourself.git /opt/docker/composeyourself
 sudo -u dockerops git -C /opt/docker/composeyourself submodule update --init --recursive
 ```
 
-5. Apply the shared-group permissions to the USB mount (so dockerops can write too)
+3. **Configure environment:**
+```bash
+sudo -u dockerops cp /opt/docker/composeyourself/.env.example /opt/docker/composeyourself/.env
+sudo -u dockerops nano /opt/docker/composeyourself/.env
+# Set TAILSCALE_HOSTNAME=rocketman and other variables
+```
+
+4. **Setup storage permissions:**
 ```bash
 sudo groupadd -f dockershare
-sudo usermod -aG dockershare [non-root-system-user]
 sudo usermod -aG dockershare dockerops
-
-sudo mkdir /mnt/storage/logs
+sudo mkdir -p /mnt/storage/media/audio /mnt/storage/media/.logs /mnt/storage/media/photos/library
 sudo chgrp -R dockershare /mnt/storage
 sudo chmod -R g+rwX /mnt/storage
 sudo find /mnt/storage -type d -exec chmod g+s {} \;
-
-sudo setfacl -R -m g:dockershare:rwx /mnt/storage
-sudo setfacl -R -d -m g:dockershare:rwx /mnt/storage
 ```
 
-6. Install service
+5. **Install systemd service:**
 ```bash
-cp /opt/docker/composeyourself/composeyourself.service /etc/systemd/system/composeyourself.service 
-```
-
-7. Setup the .env file
-```bash
-sudo -u dockerops vi /opt/docker/composeyourself/.env
-```
-
-7. Enable the daemon file
-```bash
+sudo cp /opt/docker/composeyourself/composeyourself-rocketman.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now composeyourself.service
+sudo systemctl enable composeyourself-rocketman.service
 ```
+
+7. **Deploy:**
+```bash
+cd /opt/docker/composeyourself
+sudo -u dockerops ./deploy.sh rocketman
+```
+
+### Sweetpaintedlady (DigitalOcean)
+
+1. **Create dockerops user:**
+```bash
+sudo useradd --system --create-home --home-dir /opt/docker --shell /usr/sbin/nologin dockerops || true
+sudo mkdir -p /opt/docker
+sudo chown -R dockerops:dockerops /opt/docker
+sudo usermod -aG docker dockerops
+```
+
+2. **Clone repository:**
+```bash
+sudo -u dockerops git clone git@github.com:aaronromeo/composeyourself.git /opt/docker/composeyourself
+```
+
+3. **Configure environment:**
+```bash
+sudo -u dockerops cp /opt/docker/composeyourself/.env.example /opt/docker/composeyourself/.env
+sudo -u dockerops nano /opt/docker/composeyourself/.env
+# Set all sweetpaintedlady-specific variables
+```
+
+4. **Setup Authelia users:**
+   > **Default Credentials:** A pre-configured admin user exists:
+   > - Username: `admin`
+   > - Password: `TemporaryPass123!`
+   >
+   > **IMPORTANT:** Change this password immediately after first login!
+
+   ```bash
+   # Generate a new password hash (run this after first deployment):
+   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia \
+     authelia crypto hash generate argon2 --password 'YourNewSecurePassword123!'
+
+   # Update services/authelia/users_database.yml with the new hash, then restart:
+   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+   ```
+
+5. **First Login:**
+   - Go to `https://<your-domain.com>`
+   - Login with username `admin` and password `TemporaryPass123!`
+   - Set up 2FA when prompted (Google Authenticator, Authy, etc.)
+   - **Immediately change your password** using the steps above
+
+6. **Install systemd service:**
+```bash
+sudo cp /opt/docker/composeyourself/composeyourself-sweetpaintedlady.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable composeyourself-sweetpaintedlady.service
+```
+
+7. **Deploy:**
+```bash
+cd /opt/docker/composeyourself
+sudo -u dockerops ./deploy.sh sweetpaintedlady
+```
+
+8. **Setup DNS:**
+   - Create A record: `<your-domain.com>` → Your DO droplet IP
+   - Wait for DNS propagation
 
 ## Service Management
 
-### All Services
+### Rocketman
+
 ```bash
-# Check status of all services
-docker compose ps
+# Deploy or update
+cd /opt/docker/composeyourself
+./deploy.sh rocketman
+./update.sh rocketman
 
-# View logs for all services
-docker compose logs -f
+# Check status
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml ps
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml logs -f
 
-# Stop all services
-docker compose down
+# Restart service
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml restart <service>
 
-# Restart all services
-docker compose restart
-
-# Update and rebuild all services
-docker compose build --no-cache
-docker compose up -d
+# View systemd logs
+sudo journalctl -u composeyourself-rocketman.service -f
 ```
 
-### Specific Service
+### Sweetpaintedlady
+
 ```bash
-# Check service status
-docker compose ps <service-name>
+# Deploy or update
+cd /opt/docker/composeyourself
+./deploy.sh sweetpaintedlady
+./update.sh sweetpaintedlady
 
-# View service logs
-docker compose logs -f <service-name>
+# Check status
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml ps
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs -f
 
-# Restart service only
-docker compose restart <service-name>
+# Restart service
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart <service>
 
-# Stop service only
-docker compose stop <service-name>
-
-# Rebuild and restart service
-docker compose build <service-name> --no-cache
-docker compose up -d <service-name>
+# View systemd logs
+sudo journalctl -u composeyourself-sweetpaintedlady.service -f
 ```
 
-## Configuration
+## Accessing Services
 
-Configuration is service-specific. See each service's README or the service directory for details.
+### Rocketman (via Tailscale)
 
-### Open WebUI + OpenRouter
+All services are accessible only via Tailscale network:
 
-Open WebUI is configured in `docker-compose.yml` with:
-- Port mapping: `127.0.0.1:3000:8080`
-- Persistent data: `./services/agenticui:/app/backend/data`
-- OpenRouter base URL: `OPENAI_API_BASE_URL=https://openrouter.ai/api/v1`
-- API key mapping: `OPENAI_API_KEY=${OPENROUTER_API_KEY}`
+- **yt-dlp**: http://rocketman:8080
+- **announcements**: http://rocketman:8091
+- **immich**: http://rocketman:2283
 
-Set this in `.env`:
+### Sweetpaintedlady (Public with MFA)
 
+- **Open WebUI**: https://<your-domain.com>
+  - Requires Authelia authentication (username + password + 2FA)
+- **Authelia Portal**: https://auth.<your-domain.com> (optional)
+
+## Authelia User Management
+
+### Adding a New User
+
+1. Generate password hash:
 ```bash
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+authelia crypto hash generate argon2 --password 'NewUserPassword123!'
 ```
 
-Then start only Open WebUI:
-
-```bash
-docker compose up -d openwebui
+2. Edit `services/authelia/users_database.yml`:
+```yaml
+newuser:
+  displayname: "New User"
+  password: "$argon2id$v=19$m=65536,t=3,p=4$..."  # paste hash here
+  email: newuser@example.com
+  groups:
+    - users
 ```
 
-To allow LAN access to Open WebUI on `http://<host>:3000` and Immich on `http://<host>:2283`, add UFW rules:
+3. Restart Authelia:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+```
+
+### Resetting a Password
+
+Users can request password reset via the Authelia login page. An email with reset link will be sent via configured SMTP.
+
+## Inter-Host Communication
+
+Both hosts communicate via Tailscale:
 
 ```bash
-sudo ufw allow 3000/tcp
-sudo ufw allow from 192.168.86.0/24 to any port 2283 proto tcp
-sudo ufw status verbose
+# From sweetpaintedlady, test connection to rocketman
+ping rocketman
+
+# Access rocketman services from sweetpaintedlady
+curl http://rocketman:8091/health
 ```
 
 ## Troubleshooting
 
-### Container Won't Start
+### Rocketman
+
+**Service won't start:**
 ```bash
 # Check logs
-docker compose logs yt-dlp-web
+docker compose -f docker-compose.yml -f docker-compose.rocketman.yml logs <service>
+
+# Verify storage permissions
+ls -la /mnt/storage/media/
+sudo chown -R dockerops:dockershare /mnt/storage/media
 
 # Check disk space
 df -h /mnt/storage
-
-# Check permissions
-ls -la /mnt/storage/media/downloads
 ```
 
-### Build Fails
+**Tailscale not connecting:**
 ```bash
-# Clean build
-docker compose down
-docker system prune -f
-docker compose build --no-cache
+# Check tailscale status
+sudo tailscale status
+
+# Reauthenticate if needed
+sudo tailscale up --force-reauth
 ```
 
-## File Structure
+### Sweetpaintedlady
 
+**HTTPS not working:**
+```bash
+# Check DNS resolution
+dig <your-domain.com>
+
+# Verify Caddy logs
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs caddy
+
+# Check if ports 80/443 are open
+sudo ufw status
 ```
-.
-├── docker-compose.yml          # Multi-service orchestration
-├── deploy.sh                   # Deploy all services
-├── update.sh                   # Pull and refresh services
-├── services/
-│   ├── agenticui/              # Open WebUI persistent data
-│   ├── announcements/         # Service submodule
-│   └── yt-dlp/                # Service submodule
-└── README.md                  # This file
+
+**Authelia authentication fails:**
+```bash
+# Check Authelia logs
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml logs authelia
+
+# Verify users_database.yml syntax
+# Ensure password hashes are valid Argon2 format
 ```
 
-## Adding New Services
+**Cannot access Open WebUI after authentication:**
+```bash
+# Check all services are running
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml ps
 
-To add a new service (e.g., Jellyfin, Plex, etc.):
+# Verify Open WebUI is healthy
+docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec openwebui curl http://localhost:8080/api/version
+```
 
-1. **Create service directory**:
-   ```bash
-   mkdir -p services/new-service
-   ```
+### General
 
-2. **Add service files**:
-   - `Dockerfile` (if custom build needed)
-   - Configuration files
-   - Any service-specific scripts
+**Permission denied with dockerops user:**
+```bash
+# Add dockerops to docker group
+sudo usermod -aG docker dockerops
+# Log out and back in for changes to take effect
+```
 
-3. **Update docker-compose.yml**:
-   ```yaml
-   services:
-     new-service:
-       build: ./services/new-service  # or use existing image
-       container_name: new-service
-       restart: unless-stopped
-       ports:
-         - "PORT:PORT"
-       volumes:
-         - ./services/new-service/config:/config
-       networks:
-         - pi-services
-   ```
+**Git submodule issues:**
+```bash
+# Reinitialize submodules
+git submodule update --init --recursive --force
+```
 
-4. **Create deployment script** (optional):
-   ```bash
-   cp deploy-yt-dlp.sh deploy-new-service.sh
-   # Edit to match new service
-   ```
+## Security Notes
+
+- **Rocketman**: No public exposure - all services only accessible via Tailscale
+- **Sweetpaintedlady**: Public HTTPS with mandatory MFA via Authelia
+- **Secrets**: Never commit `.env` file to git - use `.env.example` as template
+- **Passwords**: Use strong passwords and enable 2FA for all Authelia users
+- **Updates**: Keep Docker images updated with `./update.sh <host>`
+
+## Future Enhancements
+
+- [ ] Automated backups from sweetpaintedlady to rocketman
+- [ ] BackBlaze B2 offsite backup integration
+- [ ] Monitoring/alerting with Prometheus/Grafana
+- [ ] Centralized logging
 
 ## Support
 
 For issues or questions:
-1. Check the logs: `docker compose logs -f`
+1. Check the logs: `docker compose -f docker-compose.yml -f docker-compose.<host>.yml logs -f`
 2. Verify container status: `docker compose ps`
+3. Check Tailscale connectivity: `tailscale status`
+4. Review [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed architecture
+
+## License
+
+MIT License - See LICENSE file for details

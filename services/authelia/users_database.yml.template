@@ -1,0 +1,57 @@
+users:
+  admin:
+    displayname: "Administrator"
+    password: "${ADMIN_PASSWORD_HASH}"
+    email: "${AUTHELIA_ADMIN_EMAIL}"
+    groups:
+      - admins
+      - users
+      - openwebui
+      - openwebui-admin
+
+  # Second user - Uncomment and add proper password hash after setup
+  # user1:
+  #   displayname: "User One"
+  #   # Generate hash with: authelia crypto hash generate argon2 --password 'yourpassword'
+  #   password: "GENERATE_HASH_AND_REPLACE"
+  #   email: user1@example.com
+  #   groups:
+  #     - users
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+#
+# 1. Generate secure password hashes for each user:
+#
+#    After Authelia container is running, exec into it:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml exec authelia bash
+#
+#    Then generate a password hash:
+#    authelia crypto hash generate argon2 --password 'YourSecurePassword123!'
+#
+# 2. Update this file with:
+#    - Real usernames (lowercase, no spaces)
+#    - Generated password hashes
+#    - Real email addresses (via AUTHELIA_ADMIN_EMAIL env var)
+#    - Appropriate display names
+#
+# 3. Restart Authelia to pick up changes:
+#    docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml restart authelia
+#
+# 4. First login:
+#    - Go to https://${DOMAIN}
+#    - Log in with username and password
+#    - You'll be prompted to set up 2FA (TOTP app like Google Authenticator)
+#
+# =============================================================================
+# PASSWORD REQUIREMENTS
+# =============================================================================
+#
+# While Authelia doesn't enforce password complexity by default, we recommend:
+#   - Minimum 12 characters
+#   - Mix of uppercase, lowercase, numbers, and symbols
+#   - No dictionary words or personal information
+#   - Use a password manager to generate and store
+#
+# =============================================================================
