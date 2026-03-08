@@ -10,7 +10,6 @@
 # Documentation: https://www.authelia.com/configuration/
 # Environment Variables: https://www.authelia.com/configuration/methods/environment/
 
----
 # Server Configuration
 server:
   address: "tcp://0.0.0.0:9091"
@@ -23,7 +22,7 @@ server:
 log:
   level: info
   format: text
-  file_path: /config/authelia.log
+  file_path: /data/authelia.log
   keep_stdout: true
 
 # JWT Configuration
@@ -46,7 +45,10 @@ session:
   expiration: 1h
   inactivity: 5m
   remember_me: 1M
-  # Domain is set via env var: AUTHELIA_SESSION_DOMAIN
+  cookies:
+    - domain: '${DOMAIN}'
+      authelia_url: 'https://auth.${DOMAIN}'
+      default_redirection_url: 'https://${SUBDOMAIN}.${DOMAIN}'
 
 # Regulation (Rate Limiting)
 # Prevent brute force attacks
@@ -59,7 +61,7 @@ regulation:
 # Set via AUTHELIA_STORAGE_ENCRYPTION_KEY env var
 storage:
   local:
-    path: /config/db.sqlite3
+    path: /data/db.sqlite3
 
 # Notification Configuration
 # Set via AUTHELIA_NOTIFIER_SMTP_* env vars
@@ -79,6 +81,7 @@ authentication_backend:
     custom_url: ""
   file:
     path: /config/users_database.yml
+    watch: true
     password:
       algorithm: argon2
       argon2:
@@ -173,6 +176,9 @@ telemetry:
 # To enable OIDC, see: https://www.authelia.com/configuration/identity-providers/openid-connect/
 identity_providers:
   oidc:
+    jwks:
+      - key_id: "default"
+        key: {{ secret "/config/keys/private.pem" | mindent 10 "|" | msquote }}
     ## The other portions of the mandatory OpenID Connect 1.0 configuration go here.
     ## See: https://www.authelia.com/c/oidc
     clients:

@@ -1,11 +1,13 @@
 users:
   admin:
     displayname: "Administrator"
-    password: "$argon2id$v=19$m=65536,t=3,p=4$2H0SW05Peb4dZhDAXNT1mg$GScqMIRV79FDiX6JgioQIu9T+xZcIGAYtwNbMunbZFQ"
+    password: "${ADMIN_PASSWORD_HASH}"
     email: "${AUTHELIA_ADMIN_EMAIL}"
     groups:
       - admins
       - users
+      - openwebui
+      - openwebui-admin
 
   # Second user - Uncomment and add proper password hash after setup
   # user1:
