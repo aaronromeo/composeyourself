@@ -14,7 +14,7 @@
 services:
   # Open WebUI - AI Chat Interface
   openwebui:
-    image: ghcr.io/open-webui/open-webui:git-6c159a9-cuda
+    image: ghcr.io/open-webui/open-webui:v0.8.12
     container_name: openwebui
     restart: unless-stopped
     # No direct port exposure - accessed via Caddy reverse proxy
