@@ -48,9 +48,13 @@
     # Forward authentication to Authelia
     @auth_required {
         not path /api/config
+        not path /api/v1/auths/*
         not path /api/health
         not path /api/version
         not path /health
+        not path /oauth/*
+        not path /auth
+        not path /ws/socket.io/*
     }
 
     # Route all requests through Authelia for authentication

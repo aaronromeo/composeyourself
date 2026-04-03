@@ -101,7 +101,7 @@ access_control:
   default_policy: two_factor
   rules:
     # Health check endpoint - no auth required
-    - domain: "${DOMAIN}"
+    - domain: "${SUBDOMAIN}.${DOMAIN"
       resources:
         - "^/api/health$"
         - "^/api/version$"
@@ -109,7 +109,7 @@ access_control:
       policy: bypass
     
     # Main application - require 2FA
-    - domain: "${DOMAIN}"
+    - domain: "${SUBDOMAIN}.${DOMAIN"
       policy: two_factor
     
     # Authelia portal itself - one_factor (password only) for login page
