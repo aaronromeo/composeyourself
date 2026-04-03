@@ -55,6 +55,8 @@
         not path /oauth/*
         not path /auth
         not path /ws/socket.io/*
+        not path /static/*
+        not path /_app/immutable/*
     }
 
     # Route all requests through Authelia for authentication
