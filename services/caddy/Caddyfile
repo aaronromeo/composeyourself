@@ -47,6 +47,7 @@
     
     # Forward authentication to Authelia
     @auth_required {
+        not path /api/config
         not path /api/health
         not path /api/version
         not path /health
