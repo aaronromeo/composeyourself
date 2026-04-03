@@ -29,6 +29,7 @@ services:
       - ENV=production
       # OIDC Configuration with Authelia
       - WEBUI_URL=https://${SUBDOMAIN}.${DOMAIN}
+      - ENABLE_LOGIN_FORM=false
       - ENABLE_OAUTH_SIGNUP=true
       - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=true
       - OAUTH_CLIENT_ID=open-webui
