@@ -105,6 +105,7 @@ access_control:
       resources:
         - "^/api/health$"
         - "^/api/version$"
+        - "^/health$"
       policy: bypass
     
     # Main application - require 2FA
