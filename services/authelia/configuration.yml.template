@@ -17,6 +17,9 @@ server:
   endpoints:
     enable_pprof: false
     enable_expvars: false
+    authz:
+      forward-auth:
+        implementation: 'ForwardAuth'
 
 # Log Configuration
 log:
