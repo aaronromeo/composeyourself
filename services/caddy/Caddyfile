@@ -36,44 +36,11 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         
         # Content Security Policy (adjust as needed)
-        # Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
         Content-Security-Policy "script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
         
         # Remove server header
         -Server
     }
-
-    # Handle ACME challenges (for Let's Encrypt)
-    # This is automatic in Caddy, but explicit for clarity
-    
-    # # Forward authentication to Authelia
-    # @auth_required {
-    #     not path /api/config
-    #     not path /api/v1/auths/*
-    #     not path /api/health
-    #     not path /api/version
-    #     not path /health
-    #     not path /oauth/*
-    #     not path /auth
-    #     not path /ws/socket.io/*
-    #     not path /static/*
-    #     not path /_app/immutable/*
-    # }
-
-    # # Route all requests through Authelia for authentication
-    # forward_auth @auth_required authelia:9091 {
-    #     # uri /api/verify?rd=https://auth.{$DOMAIN}
-    #     uri /api/authz/forward-auth
-        
-    #     # Copy headers from Authelia response
-    #     copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
-        
-    #     # If Authelia returns 401/403, redirect to auth portal
-    #     @error status 401 403
-    #     handle_response @error {
-    #         redir https://auth.{$DOMAIN}/?rd={uri}
-    #     }
-    # }
 
     # Reverse proxy to Open WebUI
     reverse_proxy openwebui:8080 {
