@@ -29,7 +29,7 @@ services:
       # Download directories
       - DOWNLOAD_DIR=/downloads
       - AUDIO_DIR=/downloads/audio
-      - LOG_FILE=/app/logs/yt-dlp-web.log
+      - LOG_FILE=${LOG_FILE:-/app/logs/yt-dlp-web.log}
       # Server configuration
       - PORT=8080
       # Optional: Set timezone
