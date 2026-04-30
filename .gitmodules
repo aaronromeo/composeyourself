@@ -4,3 +4,6 @@
 [submodule "services/yt-dlp"]
 	path = services/yt-dlp
 	url = git@github.com:aaronromeo/yt-dlp.git
+[submodule "services/swole"]
+	path = services/swole
+	url = git@github.com:aaronromeo/uha-hyp-5k-std.git

@@ -29,7 +29,7 @@ services:
       # Download directories
       - DOWNLOAD_DIR=/downloads
       - AUDIO_DIR=/downloads/audio
-      - LOG_FILE=${LOG_FILE:-/app/logs/yt-dlp-web.log}
+      - LOG_FILE=/app/logs/yt-dlp-web.log
       # Server configuration
       - PORT=8080
       # Optional: Set timezone
@@ -68,6 +68,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - cys-service
+
+  swole:
+    build:
+      context: ./services/swole
+      dockerfile: Dockerfile
+    container_name: swole
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - ./services/swole/data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - PORT=8080
     networks:
       - cys-service
 
