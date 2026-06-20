@@ -18,7 +18,13 @@ the query service, web UI, and alertmanager. The stack here is:
 | `signoz-clickhouse` | `clickhouse/clickhouse-server` | Trace/metric/log store |
 | `signoz-zookeeper` | `signoz/zookeeper` | ClickHouse coordination |
 | `signoz-otel-collector` | `signoz/signoz-otel-collector` | OTLP ingest -> ClickHouse |
-| `signoz-schema-migrator` | `signoz/signoz-schema-migrator` | One-shot schema init (sync + async) |
+| `signoz-schema-migrator` | `signoz/signoz-otel-collector` | One-shot schema init (bootstrap + sync + async) |
+| `signoz-init-clickhouse` | `clickhouse/clickhouse-server` | One-shot: installs the `histogramQuantile` UDF binary |
+
+> **Note:** the consolidated SigNoz no longer ships a standalone
+> `signoz/signoz-schema-migrator` image; schema migration runs from the
+> `signoz/signoz-otel-collector` image via `migrate bootstrap && migrate sync up
+> && migrate async up`.
 
 > **Note:** older SigNoz docs describe separate `query-service`, `frontend`, and
 > `alertmanager` containers with the UI on `:3301`. That layout is deprecated for
@@ -28,7 +34,10 @@ the query service, web UI, and alertmanager. The stack here is:
 
 - `docker-compose.signoz.yml` — overlay included by `deploy.sh` on rocketman.
 - `otel-collector-config.yaml` — main collector pipeline.
-- `clickhouse-config.xml`, `clickhouse-users.xml` — ClickHouse tuning.
+- `clickhouse-config.xml`, `clickhouse-users.xml` — ClickHouse server/user tuning.
+- `clickhouse-cluster.xml` — ZooKeeper + single-node `cluster` topology (mounted
+  into `config.d/`); required for the `ON CLUSTER` schema migrations.
+- `clickhouse-custom-function.xml` — registers the `histogramQuantile` UDF.
 - `alertmanager.yml` — alert routing (configured in Phase 6).
 - `prometheus.yml` — scrape targets for the collector's prometheus receiver.
 - `dashboards/` — seeded SigNoz dashboards (Phase 6).

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  ZooKeeper coordination + single-node `cluster` topology for SigNoz ClickHouse.
+  Mounted into /etc/clickhouse-server/config.d/cluster.xml. Hostnames match this
+  repo's signoz-* container naming convention (upstream uses zookeeper-1 /
+  clickhouse). The schema migrator creates tables ON CLUSTER `cluster`, so this
+  single-shard/single-replica cluster definition is REQUIRED for migrations to
+  succeed even though we run one ClickHouse node.
+-->
+<clickhouse>
+    <zookeeper>
+        <node index="1">
+            <host>signoz-zookeeper</host>
+            <port>2181</port>
+        </node>
+    </zookeeper>
+
+    <remote_servers>
+        <cluster>
+            <shard>
+                <replica>
+                    <host>signoz-clickhouse</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </cluster>
+    </remote_servers>
+</clickhouse>

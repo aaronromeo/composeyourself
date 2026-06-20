@@ -1,0 +1,10 @@
+# Prometheus scrape skeleton for the collector's prometheus receiver.
+# Phase 1: internal-only / empty. The collector's prometheus receiver references
+# this in Phase 2.
+#
+# TODO(Phase 2): add scrape targets — cAdvisor, node-exporter, postgres-exporter,
+# redis-exporter, and ClickHouse (:9363/metrics).
+global:
+  scrape_interval: 60s
+
+scrape_configs: []
