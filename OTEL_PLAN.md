@@ -3,22 +3,29 @@
 Companion to [`OTEL_SPEC.md`](./OTEL_SPEC.md). Phases are sequential; each
 phase ends with something demoable and safe to leave running.
 
+> **Status:** Phases 0–3 implemented as config on branch `feat/otel-observability`
+> (deploy/verify steps still require the live hosts). The SigNoz layout was updated
+> to the current consolidated architecture: a single `signoz/signoz` image (UI on
+> **`8080`**, not `3301`), schema migration via the `signoz-otel-collector` image,
+> exporter `signozclickhousemetrics`, and processor `signozspanmetrics/delta`.
+> Phases 4–7 (submodule instrumentation, immich, dashboards/alerts, docs) remain.
+
 ---
 
 ## Phase 0 — Prep & decisions (no infra changes)
 
 **Goal:** lock concrete versions, file layout, and tailnet binding.
 
-- [ ] Pick SigNoz release pin (latest stable on GitHub releases at start).
-- [ ] Pick `otelcol-contrib` release pin (matched major to SigNoz collector).
-- [ ] Decide Tailscale bind mechanism:
-      - Option A: `network_mode: host` on the SigNoz OTel collector +
-        `--config` with `endpoint: 100.x.y.z:4317`.
-      - Option B: bridge network + a small `socat`/`tailscale serve` shim.
-      - **Recommended A** — least moving parts.
-- [ ] Create branch: `feat/otel-observability`.
-- [ ] Add `services/signoz/` and `services/otelcol-spl/` directories with
-      `.keep` and a `README.md` stub.
+- [x] Pick SigNoz release pin → `v0.129.0` (see `services/signoz/VERSIONS.md`).
+- [x] Pick `otelcol-contrib` release pin → `0.135.0`.
+- [x] Decide Tailscale bind mechanism → **Option A, adapted:** keep the
+      containers on the `cys-service` bridge (so local services resolve
+      `signoz-otel-collector` by DNS) and bind the externally-reachable ports
+      (UI `8080`, OTLP `4317`/`4318`) to the tailnet IP via `SIGNOZ_BIND_ADDR`
+      instead of `network_mode: host` (which would break the bridge DNS).
+- [x] Create branch: `feat/otel-observability`.
+- [x] Add `services/signoz/` and `services/otelcol-spl/` directories with
+      READMEs (and exporter config dirs).
 
 **Exit criteria:** branch open, no behavior change, repo structure ready.
 
@@ -26,30 +33,30 @@ phase ends with something demoable and safe to leave running.
 
 ## Phase 1 — SigNoz stack on rocketman
 
-**Goal:** SigNoz UI reachable on `http://rocketman:3301` over Tailscale, with
+**Goal:** SigNoz UI reachable on `http://rocketman:8080` over Tailscale, with
 empty data. No producers yet.
 
-1. Write `services/signoz/docker-compose.signoz.yml` containing:
-   - `clickhouse`
-   - `zookeeper`
-   - `schema-migrator` (one-shot, depends_on clickhouse healthy)
-   - `query-service`
-   - `frontend`
-   - `alertmanager`
+1. Write `services/signoz/docker-compose.signoz.yml` containing (current
+   consolidated layout):
+   - `signoz-clickhouse`
+   - `signoz-zookeeper`
+   - `signoz-init-clickhouse` (one-shot: installs the histogramQuantile UDF)
+   - `signoz-schema-migrator` (one-shot, `signoz-otel-collector` image running
+     `migrate bootstrap/sync/async`; depends_on clickhouse healthy)
    - `signoz-otel-collector`
-   - `signoz-otel-collector-metrics`
+   - `signoz` (consolidated UI + query service + alertmanager, UI on :8080)
    - All on the `cys-service` bridge network.
    - Resource limits per SPEC §8.
-2. Write `services/signoz/clickhouse-config.xml`,
-   `clickhouse-users.xml`, `alertmanager.yml` — start from SigNoz upstream
-   defaults, redact unused bits.
+2. Write `services/signoz/clickhouse-config.xml`, `clickhouse-cluster.xml`,
+   `clickhouse-users.xml`, `clickhouse-custom-function.xml`, `alertmanager.yml`
+   — start from SigNoz upstream defaults, redact unused bits.
 3. Write `services/signoz/otel-collector-config.yaml`:
    - receivers: `otlp` (grpc+http on tailnet IP), `prometheus` (internal),
      `filelog` (commented stub for now)
    - processors: `batch`, `memory_limiter`, `resourcedetection/system`,
-     `signozspanmetrics/cumulative`
+     `signozspanmetrics/delta`
    - exporters: `clickhousetraces`, `clickhouselogsexporter`,
-     `clickhousemetricswrite`
+     `signozclickhousemetrics`
 4. Update `.env.example` with new vars (see SPEC §10).
 5. Update `deploy.sh` to include the signoz overlay file when host is
    `rocketman`.
@@ -57,7 +64,7 @@ empty data. No producers yet.
    in deploy.sh's rocketman setup block (with appropriate chown).
 7. Deploy. Verify:
    - `docker compose ... ps` shows all signoz containers healthy.
-   - `curl http://localhost:3301` returns the UI.
+   - `curl http://localhost:8080` returns the UI.
    - From sweetpaintedlady: `curl http://rocketman:4317` connects (gRPC
      handshake error is fine — proves reachability).
    - First-time SigNoz admin user can be created.
@@ -214,9 +221,9 @@ immediately useful context.
 1. Update top-level `README.md`:
    - Replace "Monitoring/alerting with Prometheus/Grafana" + "Centralized
      logging" in the Future Enhancements section with a link to OTEL_SPEC.md.
-   - Add Observability section explaining `http://rocketman:3301` access.
+   - Add Observability section explaining `http://rocketman:8080` access.
    - Add troubleshooting subsection.
-2. Update `SERVICES.md` with new ports (3301, 4317, 4318, 9100, 8081, etc.).
+2. Update `SERVICES.md` with new ports (8080, 4317, 4318, 9100, 8081, etc.).
 3. Update `.env.example` (already done in Phase 1, double-check).
 4. Make sure `update.sh` pulls the new images.
 5. Document the "where does this signal come from?" map for future you.

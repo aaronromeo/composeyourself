@@ -1,8 +1,18 @@
 # OpenTelemetry Observability — Specification
 
-Status: **Draft for review**
+Status: **Implemented (Phases 0–3); architecture updated to current SigNoz**
 Owner: rocketman host
 Repo: `composeyourself-grafana`
+
+> **Architecture note (updated during implementation):** Current SigNoz ships as a
+> single consolidated `signoz/signoz` image that bundles the query service, web UI,
+> and alertmanager, with the **UI on port `8080`** (not the older separate
+> `query-service` / `frontend` / `alertmanager` containers on `3301`). Schema
+> migration runs from the `signoz-otel-collector` image (`migrate bootstrap/sync/async`),
+> not a standalone `signoz-schema-migrator` image. The metrics exporter is
+> `signozclickhousemetrics` and the span-metrics processor is `signozspanmetrics/delta`.
+> The sections below have been updated to reflect this; references to `3301` are
+> retained only where noting the historical default.
 
 ---
 
@@ -73,17 +83,17 @@ Out of scope for v1 (parking lot):
 │   └──────────────────────────────────────────────┘                     │
 │                 │                                                      │
 │                 ▼                                                      │
-│  ┌──────────────────────────┐    ┌──────────────────────┐              │
-│  │ ClickHouse + ZooKeeper   │◄──►│ SigNoz query-service │              │
+│  ┌──────────────────────────┐◄──►┌──────────────────────┐              │
+│  │ ClickHouse + ZooKeeper   │    │ signoz (query+UI+AM) │              │
 │  └──────────────────────────┘    └──────────┬───────────┘              │
 │                                              │                         │
 │                                              ▼                         │
 │                                  ┌─────────────────────┐               │
-│                                  │ SigNoz frontend     │ :3301         │
+│                                  │ SigNoz (consolidated)│ :8080        │
 │                                  │ (UI for L/M/T)      │               │
 │                                  └─────────────────────┘               │
 │                                                                        │
-│  Reachable only via tailnet: http://rocketman:3301                     │
+│  Reachable only via tailnet: http://rocketman:8080                     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,16 +105,13 @@ All images pinned in `.env` via `SIGNOZ_VERSION`, `OTELCOL_VERSION`, etc.
 
 | Component | Image | Where | Purpose |
 |---|---|---|---|
+| `signoz` | `signoz/signoz:<ver>` | rocketman | Consolidated UI + query service + alertmanager (UI on **:8080**) |
 | `signoz-clickhouse` | `clickhouse/clickhouse-server:24.x` | rocketman | Time-series store for traces, metrics, logs |
-| `signoz-zookeeper` | `bitnami/zookeeper:3.9` | rocketman | ClickHouse coordination |
-| `signoz-schema-migrator` | `signoz/signoz-schema-migrator:<ver>` | rocketman | Init ClickHouse schemas |
-| `signoz-query-service` | `signoz/query-service:<ver>` | rocketman | API for the UI |
-| `signoz-frontend` | `signoz/frontend:<ver>` | rocketman | Web UI on :3301 |
-| `signoz-alertmanager` | `signoz/alertmanager:<ver>` | rocketman | Alert routing (configured later) |
+| `signoz-zookeeper` | `signoz/zookeeper:3.7.1` | rocketman | ClickHouse coordination |
+| `signoz-schema-migrator` | `signoz/signoz-otel-collector:<ver>` (`migrate bootstrap/sync/async`) | rocketman | One-shot ClickHouse schema init |
 | `signoz-otel-collector` | `signoz/signoz-otel-collector:<ver>` | rocketman | Main collector (OTLP in, ClickHouse out) |
-| `signoz-otel-collector-metrics` | same image, separate config | rocketman | Sidecar collector for internal SigNoz metrics |
 | `otelcol-agent` | `otel/opentelemetry-collector-contrib:<ver>` | sweetpaintedlady | Edge agent, forwards to rocketman |
-| `cadvisor` | `gcr.io/cadvisor/cadvisor:<ver>` | rocketman + SPL | Container metrics |
+| `cadvisor` | `ghcr.io/google/cadvisor:<ver>` | rocketman + SPL | Container metrics |
 | `node-exporter` | `prom/node-exporter:<ver>` | rocketman + SPL | Host metrics |
 | `postgres-exporter` | `prometheuscommunity/postgres-exporter` | rocketman | Postgres metrics for immich DB |
 | `redis-exporter` | `oliver006/redis_exporter` | rocketman | Redis metrics for immich cache |
@@ -115,7 +122,7 @@ All images pinned in `.env` via `SIGNOZ_VERSION`, `OTELCOL_VERSION`, etc.
 
 | Port | Bound to | Purpose |
 |---|---|---|
-| `3301` | tailnet IP | SigNoz frontend (UI) |
+| `8080` | tailnet IP | SigNoz UI (consolidated image; bound via `SIGNOZ_BIND_ADDR`) |
 | `4317` | tailnet IP | OTLP/gRPC ingest |
 | `4318` | tailnet IP | OTLP/HTTP ingest |
 | `8888` | 127.0.0.1 | Collector internal telemetry (not exposed) |
@@ -204,7 +211,7 @@ log lines/day, 1 K active series): roughly 5–15 GB total. Plenty of margin on
 
 ## 7. Security & access
 
-- SigNoz frontend (`:3301`) is reachable **only via Tailscale**, same model as
+- SigNoz UI (`:8080`) is reachable **only via Tailscale**, same model as
   yt-dlp/immich. No Caddy/Authelia in front of it.
 - OTLP ingest ports (`:4317`/`:4318`) bound to the Tailscale interface IP, not
   `0.0.0.0`. Local docker-network traffic uses the docker DNS name.
@@ -250,20 +257,22 @@ composeyourself-grafana/
 ├── services/
 │   ├── signoz/
 │   │   ├── README.md
+│   │   ├── VERSIONS.md                    # pinned image versions + rationale
 │   │   ├── docker-compose.signoz.yml      # signoz services as overlay
 │   │   ├── clickhouse-config.xml
+│   │   ├── clickhouse-cluster.xml         # zookeeper + ON CLUSTER topology
 │   │   ├── clickhouse-users.xml
+│   │   ├── clickhouse-custom-function.xml # histogramQuantile UDF registration
 │   │   ├── otel-collector-config.yaml
-│   │   ├── otel-collector-metrics-config.yaml
 │   │   ├── alertmanager.yml
+│   │   ├── prometheus.yml                 # scrape-target reference (pointer)
 │   │   └── dashboards/                    # seeded SigNoz dashboards (JSON)
 │   ├── otelcol-spl/
 │   │   ├── README.md
 │   │   └── config.yaml                    # SPL edge collector config
-│   ├── cadvisor/                          # tiny config or just compose
+│   ├── cadvisor/
 │   ├── node-exporter/
 │   ├── postgres-exporter/
-│   │   └── queries.yaml
 │   └── redis-exporter/
 └── .env.example                           # + SIGNOZ_* and OTEL_* vars
 ```
@@ -281,28 +290,36 @@ This keeps the SigNoz stack self-contained and easy to disable.
 
 ## 10. New environment variables (`.env.example`)
 
+The implemented values (see `.env.example` and `services/signoz/VERSIONS.md`):
+
 ```bash
 # =========================================================================
 # OBSERVABILITY (rocketman)
 # =========================================================================
-SIGNOZ_VERSION=0.x.y                       # pinned SigNoz release
-CLICKHOUSE_VERSION=24.x
-OTELCOL_CONTRIB_VERSION=0.x.y              # SPL edge collector
-CADVISOR_VERSION=v0.49.x
-NODE_EXPORTER_VERSION=v1.8.x
-POSTGRES_EXPORTER_VERSION=v0.15.x
-REDIS_EXPORTER_VERSION=v1.62.x
+SIGNOZ_VERSION=v0.129.0                     # signoz/signoz (UI+query+alertmanager)
+SIGNOZ_OTEL_COLLECTOR_VERSION=v0.144.5      # collector + schema migrator (pair)
+CLICKHOUSE_VERSION=24.1.2-alpine
+ZOOKEEPER_VERSION=3.7.1
+OTELCOL_CONTRIB_VERSION=0.135.0             # SPL edge collector
+CADVISOR_VERSION=v0.57.0
+NODE_EXPORTER_VERSION=v1.11.1
+POSTGRES_EXPORTER_VERSION=v0.19.1
+REDIS_EXPORTER_VERSION=v1.86.0
 
 # Where SigNoz/ClickHouse stores its data on rocketman
 SIGNOZ_DATA_LOCATION=/mnt/storage/signoz
 
-# Retention overrides (days)
+# Bind the UI (:8080) + OTLP ingest (:4317/:4318) to rocketman's tailnet IP.
+SIGNOZ_BIND_ADDR=0.0.0.0
+# Strong token-signing secret (openssl rand -hex 32); do not ship the upstream default.
+SIGNOZ_JWT_SECRET=
+
+# Retention overrides (days) — applied via SigNoz UI/ClickHouse TTL (Phase 6).
 SIGNOZ_LOGS_RETENTION_DAYS=14
 SIGNOZ_TRACES_RETENTION_DAYS=7
 SIGNOZ_METRICS_RETENTION_DAYS=30
 
-# Tailscale IP of rocketman, used by SPL edge collector
-# (set during first deploy; can also use MagicDNS name `rocketman`)
+# Tailscale host of rocketman, used by SPL edge collector (MagicDNS name ok).
 ROCKETMAN_TAILSCALE_HOST=rocketman
 ROCKETMAN_OTLP_GRPC_PORT=4317
 ROCKETMAN_OTLP_HTTP_PORT=4318
@@ -320,7 +337,7 @@ The feature is done when:
 1. `./deploy.sh rocketman` brings up the full SigNoz stack alongside existing
    services with no manual steps beyond a populated `.env`.
 2. `./deploy.sh sweetpaintedlady` brings up the SPL edge collector + exporters.
-3. `http://rocketman:3301` (over Tailscale) loads the SigNoz UI.
+3. `http://rocketman:8080` (over Tailscale) loads the SigNoz UI.
 4. Traces from `yt-dlp`, `announcements`, `swole` are visible in the
    Services list with non-zero RED metrics.
 5. Container metrics for all containers (both hosts) appear in the metrics
