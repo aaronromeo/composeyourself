@@ -46,7 +46,7 @@ esac
 
 # Set compose files based on host
 if [ "$HOST" = "rocketman" ]; then
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml"
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml"
 elif [ "$HOST" = "sweetpaintedlady" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
 fi
@@ -68,8 +68,11 @@ chmod +x generate_config.sh
 echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
 docker compose $COMPOSE_FILES down
 
-# Build locally since services use local Dockerfiles
-# (skip compose pull since images aren't prebuilt)
+# Pull prebuilt images (signoz, immich, exporters, etc.); ignore failures for
+# services that build locally from a Dockerfile.
+docker compose $COMPOSE_FILES pull --ignore-buildable || true
+
+# Build locally since some services use local Dockerfiles
 docker compose $COMPOSE_FILES build --no-cache
 docker compose $COMPOSE_FILES up -d
 
