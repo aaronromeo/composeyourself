@@ -59,9 +59,9 @@ if [ -f .env ]; then
     export DOMAIN
 fi
 
-# Update submodules
+# Update submodules to the commits pinned by this repo
 echo -e "${YELLOW}🔄 Updating submodules...${NC}"
-git submodule update --init --recursive
+make sync-submodules
 
 # Host-specific setup
 if [ "$HOST" = "rocketman" ]; then

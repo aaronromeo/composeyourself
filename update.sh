@@ -55,9 +55,9 @@ fi
 echo -e "${YELLOW}🔄 Pulling latest changes...${NC}"
 git pull
 
-# Update submodules
+# Update submodules to the commits pinned by this repo
 echo -e "${YELLOW}🔄 Updating submodules...${NC}"
-git submodule update --init --recursive
+make sync-submodules
 
 # Regenerate configuration files (in case templates changed)
 echo -e "${YELLOW}⚙️ Regenerating configuration files...${NC}"

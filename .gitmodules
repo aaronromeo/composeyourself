@@ -1,9 +1,12 @@
 [submodule "services/announcements"]
 	path = services/announcements
 	url = git@github.com:aaronromeo/announcements.git
+	branch = main
 [submodule "services/yt-dlp"]
 	path = services/yt-dlp
 	url = git@github.com:aaronromeo/yt-dlp.git
+	branch = main
 [submodule "services/swole"]
 	path = services/swole
 	url = git@github.com:aaronromeo/uha-hyp-5k-std.git
+	branch = main
