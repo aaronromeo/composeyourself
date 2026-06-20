@@ -80,6 +80,11 @@ echo ""
 echo -e "${GREEN}✅ Update complete for $HOST!${NC}"
 docker compose $COMPOSE_FILES ps
 
+# Seed OpenWebUI model presets (idempotent; skips gracefully if OPENWEBUI_API_KEY unset)
+echo -e "${YELLOW}🌱 Seeding OpenWebUI presets...${NC}"
+chmod +x scripts/seed-openwebui.sh
+./scripts/seed-openwebui.sh "$HOST" || echo -e "${YELLOW}⚠️  Preset seeding skipped or failed (non-fatal — see output above)${NC}"
+
 echo ""
 echo "Useful commands:"
 echo "  View logs:    docker compose $COMPOSE_FILES logs -f"

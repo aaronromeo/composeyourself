@@ -1,0 +1,30 @@
+{
+  "models": [
+    {
+      "id": "cheap",
+      "name": "Cheap (Qwen3 Coder)",
+      "base_model_id": "qwen/qwen3-coder",
+      "is_active": true,
+      "meta": {
+        "description": "Fast, cheap executor for routine coding and grunt work. Use for straightforward tasks, refactors, and boilerplate.",
+        "profile_image_url": "/static/favicon.png"
+      },
+      "params": {
+        "system": "You are a fast, efficient coding assistant for routine tasks. Apply changes directly and concisely. Do not over-explain. When in doubt, just do it."
+      }
+    },
+    {
+      "id": "deep",
+      "name": "Deep (Claude Opus 4.8)",
+      "base_model_id": "anthropic/claude-opus-4.8",
+      "is_active": true,
+      "meta": {
+        "description": "High-reasoning model for architecture, hard debugging, and decisions where being wrong is expensive.",
+        "profile_image_url": "/static/favicon.png"
+      },
+      "params": {
+        "system": "You are a senior staff engineer. Reason carefully about architecture, edge cases, security implications, and tradeoffs before answering. Show your reasoning. If something seems wrong, say so."
+      }
+    }
+  ]
+}

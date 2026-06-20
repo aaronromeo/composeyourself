@@ -23,6 +23,24 @@ x-logging: &default-logging
 
 services:
   # Open WebUI - AI Chat Interface
+  #
+  # Default model + presets are managed as code (Strategy B):
+  #
+  #   Default model (ui.default_models):
+  #     generate_config.sh copies services/agenticui-config/config.json into
+  #     ./services/agenticui/config.json before every deploy. OWUI imports it on
+  #     boot and renames it to old_config.json.
+  #
+  #     PersistentConfig gotcha: DEFAULT_MODELS env var is only honoured on FIRST
+  #     boot; after that the DB value wins. The config.json seed re-asserts the
+  #     default on every deploy regardless of prior DB state.
+  #
+  #   Named presets (Cheap / Deep):
+  #     scripts/seed-openwebui.sh POSTs services/agenticui-config/models.json to
+  #     POST /api/v1/models/import after each deploy. Requires ENABLE_API_KEYS=true
+  #     and OPENWEBUI_API_KEY set in .env (see .env.example for bootstrap steps).
+  #     The import endpoint upserts by id, so it is fully idempotent.
+  #
   openwebui:
     image: ghcr.io/open-webui/open-webui:v0.9.2
     container_name: openwebui
@@ -38,6 +56,10 @@ services:
       - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
       - OPENAI_API_KEY=${OPENROUTER_API_KEY}
       - ENV=production
+      # Enable admin API keys so scripts/seed-openwebui.sh can authenticate.
+      # Create an admin sk-... key via Settings > Account > API Keys and store
+      # it in .env as OPENWEBUI_API_KEY. See .env.example for full instructions.
+      - ENABLE_API_KEYS=true
       # OIDC Configuration with Authelia
       - DEFAULT_MODELS=${OPENWEBUI_DEFAULT_MODELS:-}
       - DEFAULT_USER_ROLE=user

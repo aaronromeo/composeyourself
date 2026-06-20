@@ -1,0 +1,6 @@
+{
+  "version": 0,
+  "ui": {
+    "default_models": "anthropic/claude-sonnet-4.6"
+  }
+}
