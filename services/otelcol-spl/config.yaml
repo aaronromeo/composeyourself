@@ -125,10 +125,8 @@ service:
   telemetry:
     # Internal collector telemetry on :8888. The legacy
     # `metrics.address: 0.0.0.0:8888` field was deprecated (collector #11205)
-    # and is ignored as of core v0.123.0, so 0.135.0 requires the readers /
-    # Prometheus pull exporter form below.
-    # TODO(verify): confirm the readers/pull/prometheus syntax against the
-    # opentelemetry-collector v0.135.0 internal-telemetry docs on the live host.
+    # and is ignored as of core v0.123.0, so 0.135.0 uses the readers / Prometheus
+    # pull exporter form below.
     metrics:
       readers:
         - pull:
