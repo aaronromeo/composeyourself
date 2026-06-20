@@ -48,6 +48,16 @@ The stack is included via `deploy.sh rocketman`, which appends
 `-f services/signoz/docker-compose.signoz.yml` to the compose invocation. Remove
 that line in `deploy.sh` to disable telemetry without touching app services.
 
+## Security note
+
+ClickHouse runs with `CLICKHOUSE_SKIP_USER_SETUP=1` and a passwordless `default`
+user (matching SigNoz upstream). This is safe here because ClickHouse publishes
+**no host port** — it is reachable only by other containers on the `cys-service`
+bridge. Do not add a host port mapping for it.
+
+Set `SIGNOZ_JWT_SECRET` (and `SIGNOZ_BIND_ADDR` to the tailnet IP) before any
+live deploy; the compose default for the JWT secret is the upstream placeholder.
+
 ## Raspberry Pi (arm64) note
 
 ClickHouse arm64 images require an ARMv8.2-A CPU. Verify the host supports it

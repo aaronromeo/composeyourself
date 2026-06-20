@@ -132,9 +132,14 @@ All images pinned in `.env` via `SIGNOZ_VERSION`, `OTELCOL_VERSION`, etc.
 Sweetpaintedlady binds nothing externally for telemetry; its collector
 **egresses** OTLP to `rocketman.<tailnet>:4317`.
 
-Tailscale binding pattern: use `network_mode: host` for the collector
-container and explicit `--listen-addr` flags pointing at the tailnet IP, OR a
-`tailscale serve` rule. Decision deferred to implementation Phase 0.5.
+Tailscale binding pattern (decided — Option A, adapted): the SigNoz containers
+stay on the `cys-service` bridge (so local rocketman services resolve
+`signoz-otel-collector` by DNS), and the externally-reachable host ports — UI
+`8080`, OTLP `4317`/`4318` — are bound to rocketman's tailnet interface IP via
+the `SIGNOZ_BIND_ADDR` env var (e.g. `${SIGNOZ_BIND_ADDR}:4317:4317`). We do
+**not** use `network_mode: host`, which would break the bridge DNS that local
+services rely on. Setting `SIGNOZ_BIND_ADDR` to the Tailscale IP keeps these
+ports off the public/LAN interface.
 
 ---
 
@@ -224,20 +229,21 @@ log lines/day, 1 K active series): roughly 5–15 GB total. Plenty of margin on
 
 ## 8. Resource budget (rocketman)
 
+Reflects the implemented `deploy.resources.limits` (consolidated `signoz`
+container replaces the old query-service + frontend + alertmanager rows; there
+is no separate metrics collector):
+
 | Component | Memory limit | CPU limit |
 |---|---|---|
 | ClickHouse | 4 GB | 2.0 |
 | ZooKeeper | 512 MB | 0.5 |
-| query-service | 512 MB | 1.0 |
-| frontend | 128 MB | 0.5 |
-| alertmanager | 128 MB | 0.25 |
+| signoz (UI + query + alertmanager) | 768 MB | 1.5 |
 | signoz-otel-collector | 1 GB | 1.0 |
-| signoz-otel-collector-metrics | 256 MB | 0.5 |
 | cAdvisor | 256 MB | 0.5 |
 | node-exporter | 64 MB | 0.25 |
 | postgres-exporter | 64 MB | 0.25 |
 | redis-exporter | 64 MB | 0.25 |
-| **Total** | **~7 GB** | **~6.5 vCPU** |
+| **Total** | **~6.7 GB** | **~6.25 vCPU** |
 
 Rocketman has ~15.4 GiB RAM, so this leaves ~8 GB for immich + the rest. If
 ClickHouse pressure shows up, we tune `max_server_memory_usage` down.
