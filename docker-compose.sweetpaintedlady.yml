@@ -155,7 +155,7 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       # Pre-staged (read-only) for the receiver_creator/docker_observer follow-up
       # that will populate container.name; no receiver consumes it yet. See
-      # OTEL_PLAN.md line 116 and the FOLLOW-UP note in the rocketman collector.
+      # docs/plans/OTEL_PLAN.md line 116 and the FOLLOW-UP note in the rocketman collector.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Disk buffer for the otlp exporter sending_queue (file_storage extension).
       - otelcol_queue:/var/lib/otelcol/queue

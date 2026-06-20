@@ -4,8 +4,8 @@ Self-contained OpenTelemetry backend (traces, metrics, logs) for the
 `composeyourself` deployment. Reachable **only over Tailscale** at
 `http://rocketman:8080`.
 
-See [`../../OTEL_SPEC.md`](../../OTEL_SPEC.md) and
-[`../../OTEL_PLAN.md`](../../OTEL_PLAN.md) for the full design.
+See [`OTEL_SPEC.md`](../../docs/specs/OTEL_SPEC.md) and
+[`OTEL_PLAN.md`](../../docs/plans/OTEL_PLAN.md) for the full design.
 
 ## Architecture
 

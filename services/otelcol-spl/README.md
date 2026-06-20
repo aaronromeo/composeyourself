@@ -4,7 +4,7 @@ Lightweight OpenTelemetry Collector that runs on **sweetpaintedlady** (DigitalOc
 VPS), gathers local infra signals, and forwards them over Tailscale to the SigNoz
 collector on rocketman.
 
-See [`../../OTEL_SPEC.md`](../../OTEL_SPEC.md) §5.3 for the design.
+See [`OTEL_SPEC.md`](../../docs/specs/OTEL_SPEC.md) §5.3 for the design.
 
 ## What it collects
 

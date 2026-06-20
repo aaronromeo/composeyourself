@@ -2,13 +2,13 @@
 #
 # Gathers local infra signals on the SPL VPS and forwards them over Tailscale to
 # the SigNoz collector on rocketman. See services/otelcol-spl/README.md and
-# OTEL_PLAN.md Phase 3 (lines 100-127).
+# docs/plans/OTEL_PLAN.md Phase 3 (lines 100-127).
 #
 # Component idioms (filelog `container` operator + container.id extraction,
 # resourcedetection/system [env, system]) are copied from the rocketman
 # collector (services/signoz/otel-collector-config.yaml) for consistency.
 #
-# Caddy tracing decision (OTEL_PLAN.md lines 117-118): the Caddyfile tracing
+# Caddy tracing decision (docs/plans/OTEL_PLAN.md lines 117-118): the Caddyfile tracing
 # block is NOT modified here — editing it is risky without the live host, and
 # caddy is already covered by filelog (its container stdout JSON logs) plus
 # cadvisor container metrics. Caddy OTLP traces are DEFERRED. If/when a clean

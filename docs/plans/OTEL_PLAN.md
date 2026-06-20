@@ -1,6 +1,6 @@
 # OpenTelemetry Observability — Implementation Plan
 
-Companion to [`OTEL_SPEC.md`](./OTEL_SPEC.md). Phases are sequential; each
+Companion to [`OTEL_SPEC.md`](../specs/OTEL_SPEC.md). Phases are sequential; each
 phase ends with something demoable and safe to leave running.
 
 > **Status:** Phases 0–3 implemented as config on branch `feat/otel-observability`
@@ -220,7 +220,8 @@ immediately useful context.
 
 1. Update top-level `README.md`:
    - Replace "Monitoring/alerting with Prometheus/Grafana" + "Centralized
-     logging" in the Future Enhancements section with a link to OTEL_SPEC.md.
+      logging" in the Future Enhancements section with a link to
+      docs/specs/OTEL_SPEC.md.
    - Add Observability section explaining `http://rocketman:8080` access.
    - Add troubleshooting subsection.
 2. Update `SERVICES.md` with new ports (8080, 4317, 4318, 9100, 8081, etc.).
