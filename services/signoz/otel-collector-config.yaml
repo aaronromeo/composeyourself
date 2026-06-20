@@ -49,8 +49,17 @@ receivers:
   # bind-mounted read-only into the collector (see docker-compose.signoz.yml).
   # Uses the modern `container` operator (format: docker) instead of the
   # deprecated manual json_parser/regex_parser operators.
-  # add_metadata_from_filepath is disabled: these are Docker host paths, not
-  # k8s pod paths, so the k8s metadata extraction does not apply.
+  #
+  # add_metadata_from_filepath is disabled: it only extracts the k8s pod-path
+  # layout, which does not match Docker host paths. To still get a usable label,
+  # a regex operator lifts the 64-hex container ID out of the file path into
+  # `container.id` so logs are correlatable in the SigNoz UI.
+  #
+  # FOLLOW-UP (post-Phase 2): to surface the human-readable container *name*
+  # (Phase 2 exit criterion), switch to the receiver_creator + docker_observer
+  # pattern, which discovers running containers and injects container.name /
+  # container.image.name. Deferred because it needs the Docker socket mounted
+  # and is best validated on the live host.
   # ---------------------------------------------------------------------------
   filelog:
     include:
@@ -62,6 +71,15 @@ receivers:
         id: container-parser
         format: docker
         add_metadata_from_filepath: false
+      - type: regex_parser
+        id: extract-container-id
+        regex: '^/var/lib/docker/containers/(?P<container_id>[a-f0-9]{64})/'
+        parse_from: attributes["log.file.path"]
+        parse_to: attributes
+      - type: move
+        id: container-id-to-resource
+        from: attributes.container_id
+        to: resource["container.id"]
 
 processors:
   batch:

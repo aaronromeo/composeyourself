@@ -198,7 +198,7 @@ services:
   # Container metrics. Listens on :8080 inside; mapped to 127.0.0.1:8081 on the
   # host (SPEC §4) and scraped internally at cadvisor:8080.
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.57.0}
+    image: ghcr.io/google/cadvisor:${CADVISOR_VERSION:-v0.57.0}
     container_name: cadvisor
     restart: unless-stopped
     logging: *default-logging

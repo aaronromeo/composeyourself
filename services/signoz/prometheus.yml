@@ -1,27 +1,15 @@
-# Prometheus scrape reference for the rocketman exporters.
+# Prometheus scrape targets — NOT a live config file.
 #
-# NOTE: As of Phase 2 the scrape_configs live INLINE in the signoz-otel-collector
-# prometheus receiver (services/signoz/otel-collector-config.yaml). The
-# signoz-otel-collector consumes a standard Prometheus `config:` block and has no
-# supported `config_file`/external-file field, so this file is NOT mounted into
-# the collector. It is retained as standalone documentation of the scrape targets
-# and stays in sync with the receiver config.
+# The signoz-otel-collector consumes a standard Prometheus `config:` block and
+# has no external-file option, so scrape targets live INLINE in the collector's
+# `prometheus` receiver:
 #
-# TODO(verify): ClickHouse self-metrics (:9363/metrics) are not yet scraped;
-# add a job once the clickhouse <prometheus> endpoint is confirmed enabled.
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: cadvisor
-    static_configs:
-      - targets: [cadvisor:8080]
-  - job_name: node-exporter
-    static_configs:
-      - targets: [node-exporter:9100]
-  - job_name: postgres-exporter
-    static_configs:
-      - targets: [postgres-exporter:9187]
-  - job_name: redis-exporter
-    static_configs:
-      - targets: [redis-exporter:9121]
+#     services/signoz/otel-collector-config.yaml  ->  receivers.prometheus.config
+#
+# This file is intentionally NOT mounted into any container. It exists only to
+# point readers at the authoritative location above (a duplicated copy here
+# would silently drift out of sync with the receiver). Edit scrape targets in
+# otel-collector-config.yaml, not here.
+#
+# TODO: ClickHouse self-metrics (:9363/metrics) are not yet scraped; add a job
+# in the collector receiver once the clickhouse <prometheus> endpoint is enabled.
