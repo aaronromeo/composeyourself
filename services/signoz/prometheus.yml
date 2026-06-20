@@ -1,10 +1,27 @@
-# Prometheus scrape skeleton for the collector's prometheus receiver.
-# Phase 1: internal-only / empty. The collector's prometheus receiver references
-# this in Phase 2.
+# Prometheus scrape reference for the rocketman exporters.
 #
-# TODO(Phase 2): add scrape targets — cAdvisor, node-exporter, postgres-exporter,
-# redis-exporter, and ClickHouse (:9363/metrics).
+# NOTE: As of Phase 2 the scrape_configs live INLINE in the signoz-otel-collector
+# prometheus receiver (services/signoz/otel-collector-config.yaml). The
+# signoz-otel-collector consumes a standard Prometheus `config:` block and has no
+# supported `config_file`/external-file field, so this file is NOT mounted into
+# the collector. It is retained as standalone documentation of the scrape targets
+# and stays in sync with the receiver config.
+#
+# TODO(verify): ClickHouse self-metrics (:9363/metrics) are not yet scraped;
+# add a job once the clickhouse <prometheus> endpoint is confirmed enabled.
 global:
-  scrape_interval: 60s
+  scrape_interval: 15s
 
-scrape_configs: []
+scrape_configs:
+  - job_name: cadvisor
+    static_configs:
+      - targets: [cadvisor:8080]
+  - job_name: node-exporter
+    static_configs:
+      - targets: [node-exporter:9100]
+  - job_name: postgres-exporter
+    static_configs:
+      - targets: [postgres-exporter:9187]
+  - job_name: redis-exporter
+    static_configs:
+      - targets: [redis-exporter:9121]

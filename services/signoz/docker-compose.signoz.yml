@@ -168,6 +168,8 @@ services:
         /signoz-otel-collector --config=/etc/otel-collector-config.yaml
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      # Phase 2: Docker container logs for the filelog receiver (read-only).
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     ports:
       # OTLP ingest for cross-host (SPL) traffic, bound to the tailnet IP in prod.
       - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:4317:4317"  # OTLP gRPC
