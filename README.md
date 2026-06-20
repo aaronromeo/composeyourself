@@ -397,6 +397,36 @@ sudo usermod -aG docker dockerops
 git submodule update --init --recursive --force
 ```
 
+## Automation
+
+### Nightly Submodule Refresh
+
+The workflow `.github/workflows/submodule-refresh.yml` runs nightly at **06:00 UTC** (and on manual `workflow_dispatch`). It advances each submodule (`services/announcements`, `services/yt-dlp`, `services/swole`) to the latest commit on its tracked branch and commits the updated pointers directly to `main` when anything changed.
+
+Because the submodules live in **private** repositories, the default `GITHUB_TOKEN` cannot read them. The workflow authenticates using a Personal Access Token stored as the repository secret `SUBMODULES_PAT`.
+
+#### Setting up the `SUBMODULES_PAT` secret
+
+1. **Create the token** at [github.com/settings/tokens](https://github.com/settings/tokens). Either type works:
+   - **Fine-grained PAT (recommended):**
+     - **Resource owner:** `aaronromeo`
+     - **Repository access:** select all four repos — `composeyourself`, `announcements`, `yt-dlp`, `uha-hyp-5k-std`
+     - **Repository permissions:** `Contents` → **Read and write** (read is enough for the submodules; write is required so the workflow can push to `composeyourself`)
+     - Set an expiration and note it so you can rotate the token before it lapses.
+   - **Classic PAT (alternative):** select the `repo` scope (grants full read/write to your private repos).
+
+2. **Copy the generated token** (it is shown only once).
+
+3. **Add it as a repository secret:**
+   - Go to **Settings → Secrets and variables → Actions → New repository secret** in the `composeyourself` repo
+     (`https://github.com/aaronromeo/composeyourself/settings/secrets/actions`).
+   - **Name:** `SUBMODULES_PAT`
+   - **Secret:** paste the token, then **Add secret**.
+
+4. **Verify:** open the **Actions** tab, select **Nightly Submodule Refresh**, and click **Run workflow** to trigger it manually. A successful run either commits a submodule update or logs `No submodule updates.`
+
+> **Note:** Scheduled workflows only run when the workflow file exists on the default branch (`main`). Rotate the PAT before its expiry to keep the schedule working.
+
 ## Security Notes
 
 - **Rocketman**: No public exposure - all services only accessible via Tailscale

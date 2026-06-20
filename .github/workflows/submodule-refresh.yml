@@ -1,0 +1,40 @@
+name: Nightly Submodule Refresh
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: submodule-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh-submodules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_PAT }}
+          persist-credentials: true
+
+      - name: Update submodules to latest remote commit
+        run: |
+          git submodule update --remote --recursive
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No submodule updates."
+            exit 0
+          fi
+          git add -A
+          git commit -m "chore: nightly submodule refresh"
+          git push origin HEAD:${{ github.ref_name }}
