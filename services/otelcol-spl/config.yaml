@@ -1,0 +1,152 @@
+# Sweetpaintedlady edge collector (otel/opentelemetry-collector-contrib 0.135.0)
+#
+# Gathers local infra signals on the SPL VPS and forwards them over Tailscale to
+# the SigNoz collector on rocketman. See services/otelcol-spl/README.md and
+# docs/plans/OTEL_PLAN.md Phase 3 (lines 100-127).
+#
+# Component idioms (filelog `container` operator + container.id extraction,
+# resourcedetection/system [env, system]) are copied from the rocketman
+# collector (services/signoz/otel-collector-config.yaml) for consistency.
+#
+# Caddy tracing decision (docs/plans/OTEL_PLAN.md lines 117-118): the Caddyfile tracing
+# block is NOT modified here — editing it is risky without the live host, and
+# caddy is already covered by filelog (its container stdout JSON logs) plus
+# cadvisor container metrics. Caddy OTLP traces are DEFERRED. If/when a clean
+# tracing port is wired in the Caddyfile, it can push to the otlp receiver below.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Scrape the local exporters + Authelia. Targets resolve over the cys-service
+  # docker network by DNS name. scrape_configs are inline (standard Prometheus
+  # `config:` block), matching the rocketman collector.
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: cadvisor
+          scrape_interval: 15s
+          static_configs:
+            - targets: [cadvisor:8080]
+        - job_name: node-exporter
+          scrape_interval: 15s
+          static_configs:
+            - targets: [node-exporter:9100]
+        - job_name: authelia
+          scrape_interval: 15s
+          static_configs:
+            - targets: [authelia:9959]
+
+  # Ship Docker container logs. The host's container log directory is
+  # bind-mounted read-only into the collector (see
+  # docker-compose.sweetpaintedlady.yml). Uses the modern `container` operator
+  # (format: docker); a regex operator lifts the 64-hex container ID out of the
+  # file path into resource["container.id"] so logs are correlatable in SigNoz.
+  filelog:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    start_at: end
+    include_file_path: true
+    operators:
+      - type: container
+        id: container-parser
+        format: docker
+        add_metadata_from_filepath: false
+      - type: regex_parser
+        id: extract-container-id
+        regex: '^/var/lib/docker/containers/(?P<container_id>[a-f0-9]{64})/'
+        parse_from: attributes["log.file.path"]
+        parse_to: attributes
+      - type: move
+        id: container-id-to-resource
+        from: attributes.container_id
+        to: resource["container.id"]
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+  memory_limiter:
+    check_interval: 2s
+    # Sized for the ~150M compose limit on this container.
+    limit_mib: 120
+    spike_limit_mib: 30
+  resourcedetection/system:
+    # env detector adds OTEL_RESOURCE_ATTRIBUTES labels; system adds host info.
+    detectors: [env, system]
+    timeout: 2s
+  # Stamp every signal with the SPL host name so both hosts are distinguishable
+  # in the SigNoz hosts list.
+  attributes/spl:
+    actions:
+      - key: host.name
+        value: sweetpaintedlady
+        action: upsert
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  # Persistent disk buffer for the otlp exporter's sending_queue. Backed by the
+  # otelcol_queue named volume (see compose). Telemetry survives collector
+  # restarts and buffers to disk during tailnet flaps — risk-register mitigation.
+  file_storage:
+    directory: /var/lib/otelcol/queue
+    create_directory: true
+    compaction:
+      on_start: true
+      directory: /var/lib/otelcol/queue
+      max_transaction_size: 65536
+
+exporters:
+  # Ship OTLP/gRPC to rocketman over Tailscale. tls.insecure because Tailscale
+  # (WireGuard) already encrypts the transport. The sending_queue is backed by
+  # the file_storage extension so batches buffer to disk across outages.
+  otlp:
+    endpoint: ${env:ROCKETMAN_TAILSCALE_HOST}:${env:ROCKETMAN_OTLP_GRPC_PORT}
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      num_consumers: 2
+      queue_size: 1000
+
+service:
+  telemetry:
+    # Internal collector telemetry on :8888. The legacy
+    # `metrics.address: 0.0.0.0:8888` field was deprecated (collector #11205)
+    # and is ignored as of core v0.123.0, so 0.135.0 uses the readers / Prometheus
+    # pull exporter form below.
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  extensions:
+    - health_check
+    - file_storage
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection/system, attributes/spl, batch]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resourcedetection/system, attributes/spl, batch]
+      exporters: [otlp]
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection/system, attributes/spl, batch]
+      exporters: [otlp]

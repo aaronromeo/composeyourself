@@ -1,6 +1,7 @@
 .env
 .env.*
-services/agenticui
+services/agenticui/*
+!services/agenticui/.keep
 services/authelia/users_database.yml
 services/authelia/configuration.yml
 *.log

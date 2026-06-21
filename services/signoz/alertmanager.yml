@@ -1,0 +1,8 @@
+# SigNoz alertmanager config — Phase 1 placeholder.
+# Minimal valid config with a null/default route. Real routing (Discord/email)
+# is configured in Phase 6.
+route:
+  receiver: "null"
+
+receivers:
+  - name: "null"

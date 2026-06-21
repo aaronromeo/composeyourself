@@ -11,12 +11,41 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml up -d
 
+# Explicit json-file log rotation. Applied to every service via the
+# `logging: *default-logging` anchor so the edge collector's filelog receiver
+# (which tails /var/lib/docker/containers/*/*-json.log) never reads unbounded
+# files. Mirrors the rocketman overlay.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Open WebUI - AI Chat Interface
+  #
+  # Default model + presets are managed as code (Strategy B):
+  #
+  #   Default model (ui.default_models):
+  #     generate_config.sh copies services/agenticui-config/config.json into
+  #     ./services/agenticui/config.json before every deploy. OWUI imports it on
+  #     boot and renames it to old_config.json.
+  #
+  #     PersistentConfig gotcha: DEFAULT_MODELS env var is only honoured on FIRST
+  #     boot; after that the DB value wins. The config.json seed re-asserts the
+  #     default on every deploy regardless of prior DB state.
+  #
+  #   Named presets (Cheap / Deep):
+  #     scripts/seed-openwebui.sh POSTs services/agenticui-config/models.json to
+  #     POST /api/v1/models/import after each deploy. Requires ENABLE_API_KEYS=true
+  #     and OPENWEBUI_API_KEY set in .env (see .env.example for bootstrap steps).
+  #     The import endpoint upserts by id, so it is fully idempotent.
+  #
   openwebui:
     image: ghcr.io/open-webui/open-webui:v0.9.6
     container_name: openwebui
     restart: unless-stopped
+    logging: *default-logging
     # No direct port exposure - accessed via Caddy reverse proxy
     # Port 8080 exposed only to internal network
     expose:
@@ -27,6 +56,10 @@ services:
       - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
       - OPENAI_API_KEY=${OPENROUTER_API_KEY}
       - ENV=production
+      # Enable admin API keys so scripts/seed-openwebui.sh can authenticate.
+      # Create an admin sk-... key via Settings > Account > API Keys and store
+      # it in .env as OPENWEBUI_API_KEY. See .env.example for full instructions.
+      - ENABLE_API_KEYS=true
       # OIDC Configuration with Authelia
       - DEFAULT_MODELS=${OPENWEBUI_DEFAULT_MODELS:-}
       - DEFAULT_USER_ROLE=user
@@ -60,6 +93,7 @@ services:
     image: caddy:2.11.1
     container_name: caddy
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
@@ -87,8 +121,11 @@ services:
     image: authelia/authelia:4.39.15
     container_name: authelia
     restart: unless-stopped
+    logging: *default-logging
     expose:
       - "9091"
+      # Prometheus metrics endpoint, scraped by the edge collector at authelia:9959.
+      - "9959"
     volumes:
       - ./services/authelia/configuration.yml:/config/configuration.yml:ro
       - ./services/authelia/users_database.yml:/config/users_database.yml:ro
@@ -97,6 +134,8 @@ services:
     environment:
       - X_AUTHELIA_CONFIG_FILTERS=template
       - TZ=America/Toronto
+      # Expose Prometheus metrics on :9959 (scraped by the edge collector).
+      - AUTHELIA_TELEMETRY_METRICS_ENABLED=true
       # Authelia configuration uses native env var mapping (AUTHELIA_ prefix)
       # See: https://www.authelia.com/configuration/methods/environment/
       - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_JWT_SECRET}
@@ -118,6 +157,96 @@ services:
       retries: 3
       start_period: 30s
 
+  # ---------------------------------------------------------------------------
+  # Phase 3 — Sweetpaintedlady edge collector + local exporters.
+  # The edge collector scrapes cadvisor/node-exporter/authelia over cys-service
+  # DNS, tails container logs, and forwards everything over Tailscale to the
+  # SigNoz collector on rocketman. See services/otelcol-spl/config.yaml.
+  # ---------------------------------------------------------------------------
+
+  # OpenTelemetry edge collector. Internal only — it egresses to rocketman over
+  # Tailscale, so no host ports are published.
+  otelcol-agent:
+    image: otel/opentelemetry-collector-contrib:${OTELCOL_CONTRIB_VERSION:-0.135.0}
+    container_name: otelcol-agent
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./services/otelcol-spl/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Pre-staged (read-only) for the receiver_creator/docker_observer follow-up
+      # that will populate container.name; no receiver consumes it yet. See
+      # docs/plans/OTEL_PLAN.md line 116 and the FOLLOW-UP note in the rocketman collector.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Disk buffer for the otlp exporter sending_queue (file_storage extension).
+      - otelcol_queue:/var/lib/otelcol/queue
+    environment:
+      - ROCKETMAN_TAILSCALE_HOST=${ROCKETMAN_TAILSCALE_HOST:-rocketman}
+      - ROCKETMAN_OTLP_GRPC_PORT=${ROCKETMAN_OTLP_GRPC_PORT:-4317}
+      - ROCKETMAN_OTLP_HTTP_PORT=${ROCKETMAN_OTLP_HTTP_PORT:-4318}
+    depends_on:
+      - cadvisor
+      - node-exporter
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          # Headroom above the memory_limiter hard ceiling (120M) for
+          # file_storage compaction + scrape buffers.
+          memory: 192M
+    networks:
+      - cys-service
+
+  # Container metrics. Listens on :8080 inside; scraped internally at
+  # cadvisor:8080 by the edge collector. Internal only (no host port).
+  cadvisor:
+    image: ghcr.io/google/cadvisor:${CADVISOR_VERSION:-v0.57.0}
+    container_name: cadvisor
+    restart: unless-stopped
+    logging: *default-logging
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    networks:
+      - cys-service
+
+  # Host metrics. Scraped internally at node-exporter:9100 by the edge
+  # collector. Internal only (no host port).
+  node-exporter:
+    image: prom/node-exporter:${NODE_EXPORTER_VERSION:-v1.11.1}
+    container_name: node-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    pid: host
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+    networks:
+      - cys-service
+
 # Shared network for all services
 networks:
   cys-service:
@@ -130,3 +259,5 @@ volumes:
     # Persist Caddy configuration
   authelia_data:
     # Persist Authelia database and state
+  otelcol_queue:
+    # Persist the edge collector's disk-buffered sending_queue

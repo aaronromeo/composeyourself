@@ -1,0 +1,15 @@
+# Prometheus scrape targets — NOT a live config file.
+#
+# The signoz-otel-collector consumes a standard Prometheus `config:` block and
+# has no external-file option, so scrape targets live INLINE in the collector's
+# `prometheus` receiver:
+#
+#     services/signoz/otel-collector-config.yaml  ->  receivers.prometheus.config
+#
+# This file is intentionally NOT mounted into any container. It exists only to
+# point readers at the authoritative location above (a duplicated copy here
+# would silently drift out of sync with the receiver). Edit scrape targets in
+# otel-collector-config.yaml, not here.
+#
+# TODO: ClickHouse self-metrics (:9363/metrics) are not yet scraped; add a job
+# in the collector receiver once the clickhouse <prometheus> endpoint is enabled.

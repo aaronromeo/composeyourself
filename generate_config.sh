@@ -122,4 +122,26 @@ envsubst '$DOMAIN $SUBDOMAIN $OAUTH_CLIENT_SECRET_DIGEST $AUTHELIA_ADMIN_EMAIL $
 
 echo -e "${GREEN}  ✓ Generated configuration.yml with domain: ${DOMAIN}${NC}"
 
+# --- OpenWebUI default model seed ---
+# Copy the committed config.json into the bind-mounted data dir so OWUI imports
+# it on next boot, re-asserting the declared default model.
+#
+# Why re-copy every deploy:
+#   OWUI renames config.json -> old_config.json after importing it, so the file
+#   is consumed. Re-copying on each deploy means the default model is always
+#   reset to the value declared in services/agenticui-config/config.json, which
+#   is the "strictly declarative" behaviour we want.
+#
+# NOTE: This only controls `ui.default_models` (and any other keys present in
+#   config.json). All other admin-panel settings continue to persist in webui.db
+#   across restarts (ENABLE_PERSISTENT_CONFIG defaults to true).
+#
+# PersistentConfig gotcha: DEFAULT_MODELS env var is only read on FIRST boot;
+#   after that the DB wins. This file-based seed re-applies the default on every
+#   deploy regardless of prior DB state — the env var alone is not enough.
+echo -e "${YELLOW}Seeding OpenWebUI default model config...${NC}"
+mkdir -p services/agenticui
+cp services/agenticui-config/config.json services/agenticui/config.json
+echo -e "${GREEN}  ✓ Copied agenticui-config/config.json -> services/agenticui/config.json${NC}"
+
 echo -e "${GREEN}Done!${NC}"

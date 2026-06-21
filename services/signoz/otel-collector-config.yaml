@@ -1,0 +1,163 @@
+# SigNoz OTel Collector config (rocketman) — Phase 1
+#
+# Adapted from SigNoz upstream deploy/docker/otel-collector-config.yaml for the
+# pinned signoz-otel-collector v0.144.5. ClickHouse DSNs point at the
+# signoz-clickhouse container on the cys-service network.
+#
+# Current component names (NOT the deprecated ones):
+#   - signozspanmetrics/delta        (delta variant, not cumulative)
+#   - signozclickhousemetrics        (renamed from clickhousemetricswrite)
+#   - clickhousetraces / clickhouselogsexporter
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ---------------------------------------------------------------------------
+  # Phase 2: scrape the rocketman exporters. Targets resolve over the
+  # cys-service docker network by DNS name. scrape_configs are inline (the
+  # signoz-otel-collector prometheus receiver consumes a standard Prometheus
+  # `config:` block — there is no supported `config_file` field). The skeleton
+  # services/signoz/prometheus.yml is kept as documentation only.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: cadvisor
+          scrape_interval: 15s
+          static_configs:
+            - targets: [cadvisor:8080]
+        - job_name: node-exporter
+          scrape_interval: 15s
+          static_configs:
+            - targets: [node-exporter:9100]
+        - job_name: postgres-exporter
+          scrape_interval: 15s
+          static_configs:
+            - targets: [postgres-exporter:9187]
+        - job_name: redis-exporter
+          scrape_interval: 15s
+          static_configs:
+            - targets: [redis-exporter:9121]
+
+  # ---------------------------------------------------------------------------
+  # Phase 2: ship Docker container logs. The host's container log directory is
+  # bind-mounted read-only into the collector (see docker-compose.signoz.yml).
+  # Uses the modern `container` operator (format: docker) instead of the
+  # deprecated manual json_parser/regex_parser operators.
+  #
+  # add_metadata_from_filepath is disabled: it only extracts the k8s pod-path
+  # layout, which does not match Docker host paths. To still get a usable label,
+  # a regex operator lifts the 64-hex container ID out of the file path into
+  # `container.id` so logs are correlatable in the SigNoz UI.
+  #
+  # FOLLOW-UP (post-Phase 2): to surface the human-readable container *name*
+  # (Phase 2 exit criterion), switch to the receiver_creator + docker_observer
+  # pattern, which discovers running containers and injects container.name /
+  # container.image.name. Deferred because it needs the Docker socket mounted
+  # and is best validated on the live host.
+  # ---------------------------------------------------------------------------
+  filelog:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    start_at: end
+    include_file_path: true
+    operators:
+      - type: container
+        id: container-parser
+        format: docker
+        add_metadata_from_filepath: false
+      - type: regex_parser
+        id: extract-container-id
+        regex: '^/var/lib/docker/containers/(?P<container_id>[a-f0-9]{64})/'
+        parse_from: attributes["log.file.path"]
+        parse_to: attributes
+      - type: move
+        id: container-id-to-resource
+        from: attributes.container_id
+        to: resource["container.id"]
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+  memory_limiter:
+    check_interval: 2s
+    # Keep under the 1G compose limit for this container.
+    limit_mib: 800
+    spike_limit_mib: 200
+  resourcedetection/system:
+    # env detector adds OTEL_RESOURCE_ATTRIBUTES labels; system adds host info.
+    detectors: [env, system]
+    timeout: 2s
+  signozspanmetrics/delta:
+    metrics_exporter: signozclickhousemetrics
+    metrics_flush_interval: 60s
+    latency_histogram_buckets:
+      [100us, 1ms, 2ms, 6ms, 10ms, 50ms, 100ms, 250ms, 500ms, 1000ms, 1400ms, 2000ms, 5s, 10s, 20s, 40s, 60s]
+    dimensions_cache_size: 100000
+    aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+    enable_exp_histogram: true
+    dimensions:
+      - name: service.namespace
+        default: default
+      - name: deployment.environment
+        default: default
+      - name: signoz.collector.id
+      - name: service.version
+      - name: browser.platform
+      - name: browser.mobile
+      - name: k8s.cluster.name
+      - name: k8s.node.name
+      - name: k8s.namespace.name
+      - name: host.name
+      - name: host.type
+      - name: container.name
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+exporters:
+  clickhousetraces:
+    datasource: tcp://signoz-clickhouse:9000/signoz_traces
+    low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
+    use_new_schema: true
+  signozclickhousemetrics:
+    dsn: tcp://signoz-clickhouse:9000/signoz_metrics
+  clickhouselogsexporter:
+    dsn: tcp://signoz-clickhouse:9000/signoz_logs
+    timeout: 10s
+    use_new_schema: true
+
+service:
+  telemetry:
+    logs:
+      encoding: json
+    metrics:
+      # Internal collector telemetry — exposed on 8888, bound to 127.0.0.1 by
+      # the compose port mapping.
+      address: 0.0.0.0:8888
+  extensions:
+    - health_check
+    - pprof
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, signozspanmetrics/delta, resourcedetection/system, batch]
+      exporters: [clickhousetraces]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resourcedetection/system, batch]
+      exporters: [signozclickhousemetrics]
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection/system, batch]
+      exporters: [clickhouselogsexporter]

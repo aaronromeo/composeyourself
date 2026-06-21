@@ -8,6 +8,15 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d
 
+# Explicit json-file log rotation. Applied to app/exporter services via the
+# `logging: *default-logging` anchor so the SigNoz filelog receiver (which tails
+# /var/lib/docker/containers/*/*-json.log) never reads unbounded files.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # yt-dlp Web Interface Service
   yt-dlp:
@@ -16,6 +25,7 @@ services:
       dockerfile: Dockerfile
     container_name: yt-dlp
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8080:8080"
     volumes:
@@ -57,6 +67,7 @@ services:
       dockerfile: Dockerfile
     container_name: announcements
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:8091:8091"
     environment:
@@ -77,6 +88,7 @@ services:
       dockerfile: Dockerfile
     container_name: swole
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:8090:8080"
     volumes:
@@ -103,6 +115,7 @@ services:
       - redis
       - database
     restart: always
+    logging: *default-logging
     healthcheck:
       disable: false
     security_opt:
@@ -123,6 +136,7 @@ services:
     env_file:
       - .env
     restart: always
+    logging: *default-logging
     healthcheck:
       disable: false
     security_opt:
@@ -141,6 +155,7 @@ services:
     healthcheck:
       test: redis-cli ping || exit 1
     restart: always
+    logging: *default-logging
     security_opt:
       - seccomp=unconfined
     deploy:
@@ -164,6 +179,7 @@ services:
       - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
     shm_size: 128mb
     restart: always
+    logging: *default-logging
     security_opt:
       - seccomp=unconfined
     deploy:
@@ -171,6 +187,102 @@ services:
         limits:
           cpus: '2.00'
           memory: '4G'
+    networks:
+      - cys-service
+
+  # ---------------------------------------------------------------------------
+  # Phase 2 — Prometheus exporters (scraped by signoz-otel-collector via the
+  # cys-service network by DNS name). See services/signoz/otel-collector-config.yaml.
+  # ---------------------------------------------------------------------------
+
+  # Container metrics. Listens on :8080 inside; mapped to 127.0.0.1:8081 on the
+  # host (SPEC §4) and scraped internally at cadvisor:8080.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:${CADVISOR_VERSION:-v0.57.0}
+    container_name: cadvisor
+    restart: unless-stopped
+    logging: *default-logging
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8081:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    networks:
+      - cys-service
+
+  # Host metrics. Bound to the tailnet IP (SPEC §4) and scraped internally at
+  # node-exporter:9100.
+  node-exporter:
+    image: prom/node-exporter:${NODE_EXPORTER_VERSION:-v1.11.1}
+    container_name: node-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    pid: host
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:9100:9100"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+    networks:
+      - cys-service
+
+  # PostgreSQL metrics for the Immich database. Internal only; scraped at
+  # postgres-exporter:9187 via cys-service DNS.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:${POSTGRES_EXPORTER_VERSION:-v0.19.1}
+    container_name: postgres-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${DB_USERNAME}:${DB_PASSWORD}@immich_postgres:5432/${DB_DATABASE_NAME}?sslmode=disable
+    depends_on:
+      - database
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+    networks:
+      - cys-service
+
+  # Redis/Valkey metrics for the Immich cache. Internal only; scraped at
+  # redis-exporter:9121 via cys-service DNS.
+  redis-exporter:
+    image: oliver006/redis_exporter:${REDIS_EXPORTER_VERSION:-v1.86.0}
+    container_name: redis-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - REDIS_ADDR=redis://immich_redis:6379
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
     networks:
       - cys-service
 

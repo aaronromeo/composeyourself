@@ -46,7 +46,7 @@ esac
 
 # Set compose files based on host
 if [ "$HOST" = "rocketman" ]; then
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml"
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml"
 elif [ "$HOST" = "sweetpaintedlady" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
 fi
@@ -68,14 +68,22 @@ chmod +x generate_config.sh
 echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
 docker compose $COMPOSE_FILES down
 
-# Build locally since services use local Dockerfiles
-# (skip compose pull since images aren't prebuilt)
+# Pull prebuilt images (signoz, immich, exporters, etc.); ignore failures for
+# services that build locally from a Dockerfile.
+docker compose $COMPOSE_FILES pull --ignore-buildable || true
+
+# Build locally since some services use local Dockerfiles
 docker compose $COMPOSE_FILES build --no-cache
 docker compose $COMPOSE_FILES up -d
 
 echo ""
 echo -e "${GREEN}✅ Update complete for $HOST!${NC}"
 docker compose $COMPOSE_FILES ps
+
+# Seed OpenWebUI model presets (idempotent; skips gracefully if OPENWEBUI_API_KEY unset)
+echo -e "${YELLOW}🌱 Seeding OpenWebUI presets...${NC}"
+chmod +x scripts/seed-openwebui.sh
+./scripts/seed-openwebui.sh "$HOST" || echo -e "${YELLOW}⚠️  Preset seeding skipped or failed (non-fatal — see output above)${NC}"
 
 echo ""
 echo "Useful commands:"

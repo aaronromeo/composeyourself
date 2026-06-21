@@ -1,0 +1,234 @@
+# SigNoz observability stack (rocketman) — Phase 1
+#
+# Consolidated modern SigNoz layout (single signoz/signoz image bundles
+# query-service + web UI + alertmanager; UI on container port 8080).
+# Older docs describing separate query-service/frontend/alertmanager on :3301
+# are DEPRECATED — do not use them.
+#
+# Included by deploy.sh on rocketman:
+#   docker compose -f docker-compose.yml -f docker-compose.rocketman.yml \
+#       -f services/signoz/docker-compose.signoz.yml up -d
+#
+# -------------------------------------------------------------------------
+# SIGNOZ_BIND_ADDR convention (Tailscale binding — Decision: Option A, adapted)
+# -------------------------------------------------------------------------
+# We do NOT use network_mode: host (it would break cys-service bridge DNS that
+# local app services rely on to reach signoz-otel-collector by name). Instead,
+# externally-reachable ports are bound to a specific interface IP via the
+# SIGNOZ_BIND_ADDR env var:
+#   - Local dev / default: SIGNOZ_BIND_ADDR unset -> binds 0.0.0.0
+#   - Production (rocketman): operator sets SIGNOZ_BIND_ADDR to the host's
+#     Tailscale interface IP so the SigNoz UI and OTLP ingest are reachable
+#     ONLY over the tailnet, never the public/LAN interface.
+# Local rocketman services keep reaching the collector via the cys-service
+# docker network by DNS name `signoz-otel-collector` (no host port needed).
+#
+# All containers join the cys-service bridge (declared at the bottom, matching
+# docker-compose.rocketman.yml).
+
+services:
+  # One-shot: install the histogramQuantile user-defined function binary that
+  # ClickHouse needs for SigNoz metrics quantile queries. Matches upstream
+  # init-clickhouse. Picks the correct os/arch (arm64 on the Pi).
+  signoz-init-clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-24.1.2-alpine}
+    container_name: signoz-init-clickhouse
+    restart: on-failure
+    command:
+      - bash
+      - -c
+      - |
+        version="v0.0.1"
+        node_os=$$(uname -s | tr '[:upper:]' '[:lower:]')
+        node_arch=$$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+        echo "Fetching histogram-binary for $${node_os}/$${node_arch}"
+        cd /tmp
+        wget -O histogram-quantile.tar.gz "https://github.com/SigNoz/signoz/releases/download/histogram-quantile%2F$${version}/histogram-quantile_$${node_os}_$${node_arch}.tar.gz"
+        tar -xvzf histogram-quantile.tar.gz
+        mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+    volumes:
+      - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
+    networks:
+      - cys-service
+
+  signoz-zookeeper:
+    image: signoz/zookeeper:${ZOOKEEPER_VERSION:-3.7.1}
+    container_name: signoz-zookeeper
+    restart: unless-stopped
+    user: root
+    environment:
+      - ZOO_SERVER_ID=1
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_AUTOPURGE_INTERVAL=1
+      - ZOO_ENABLE_PROMETHEUS_METRICS=yes
+      - ZOO_PROMETHEUS_METRICS_PORT_NUMBER=9141
+    volumes:
+      - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/zookeeper:/bitnami/zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -m 2 http://localhost:8080/commands/ruok | grep error | grep null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - cys-service
+
+  signoz-clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-24.1.2-alpine}
+    container_name: signoz-clickhouse
+    restart: unless-stopped
+    tty: true
+    depends_on:
+      signoz-init-clickhouse:
+        condition: service_completed_successfully
+      signoz-zookeeper:
+        condition: service_healthy
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    volumes:
+      - ./clickhouse-config.xml:/etc/clickhouse-server/config.xml
+      - ./clickhouse-users.xml:/etc/clickhouse-server/users.xml
+      - ./clickhouse-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - ./clickhouse-custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
+      - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/clickhouse:/var/lib/clickhouse/
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "127.0.0.1:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: 4G
+    networks:
+      - cys-service
+
+  # One-shot schema migrator. Upstream-consolidated: uses the signoz-otel-collector
+  # image (the standalone signoz/signoz-schema-migrator image is deprecated) and
+  # runs the migrate bootstrap/sync/async sequence. Must complete before the
+  # collector ingests data. ON CLUSTER `cluster` (see clickhouse-cluster.xml).
+  signoz-schema-migrator:
+    image: signoz/signoz-otel-collector:${SIGNOZ_OTEL_COLLECTOR_VERSION:-v0.144.5}
+    container_name: signoz-schema-migrator
+    restart: on-failure
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+    environment:
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://signoz-clickhouse:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    entrypoint:
+      - /bin/sh
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    networks:
+      - cys-service
+
+  signoz-otel-collector:
+    image: signoz/signoz-otel-collector:${SIGNOZ_OTEL_COLLECTOR_VERSION:-v0.144.5}
+    container_name: signoz-otel-collector
+    restart: unless-stopped
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+      signoz-schema-migrator:
+        condition: service_completed_successfully
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=host.name=rocketman,os.type=linux
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://signoz-clickhouse:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=cluster
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=true
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    entrypoint:
+      - /bin/sh
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate sync check &&
+        /signoz-otel-collector --config=/etc/otel-collector-config.yaml
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      # Phase 2: Docker container logs for the filelog receiver (read-only).
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    ports:
+      # OTLP ingest for cross-host (SPL) traffic, bound to the tailnet IP in prod.
+      - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:4317:4317"  # OTLP gRPC
+      - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:4318:4318"  # OTLP HTTP
+      # Collector internal telemetry — localhost only, never exposed.
+      - "127.0.0.1:8888:8888"
+    # Local rocketman services reach this collector via the cys-service network
+    # by DNS name `signoz-otel-collector:4317` (no host port required).
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+    networks:
+      - cys-service
+
+  signoz:
+    image: signoz/signoz:${SIGNOZ_VERSION:-v0.129.0}
+    container_name: signoz
+    restart: unless-stopped
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+      signoz-otel-collector:
+        condition: service_started
+    environment:
+      - SIGNOZ_ALERTMANAGER_PROVIDER=signoz
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://signoz-clickhouse:9000
+      - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
+      # TODO(verify): upstream ships a hardcoded JWT secret `secret` in its demo
+      # compose. Replace with a strong operator-provided secret (e.g. via
+      # ${SIGNOZ_JWT_SECRET}) before production. Left explicit to avoid a silent
+      # insecure default.
+      - SIGNOZ_TOKENIZER_JWT_SECRET=${SIGNOZ_JWT_SECRET:-secret}
+      # Retention is configured via ClickHouse TTL through the SigNoz UI/API in a
+      # later phase; the consolidated image does not consume SIGNOZ_*_RETENTION_DAYS
+      # env vars directly. TODO(verify): wire retention once the UI exposes the
+      # settings API endpoint we automate against (Phase 6).
+    volumes:
+      - ./alertmanager.yml:/etc/signoz/alertmanager.yml
+      - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/signoz:/var/lib/signoz/
+    ports:
+      # UI bound to the tailnet IP in prod (defaults to 0.0.0.0 for local dev).
+      - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.50'
+          memory: 768M
+    networks:
+      - cys-service
+
+# Shared network for all services (matches docker-compose.rocketman.yml).
+networks:
+  cys-service:
+    driver: bridge

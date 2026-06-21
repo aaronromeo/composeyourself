@@ -46,8 +46,8 @@ esac
 
 # Set compose files based on host
 if [ "$HOST" = "rocketman" ]; then
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml"
-    echo -e "${YELLOW}📦 Services: yt-dlp, announcements, immich${NC}"
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml"
+    echo -e "${YELLOW}📦 Services: yt-dlp, announcements, immich, signoz (observability)${NC}"
 elif [ "$HOST" = "sweetpaintedlady" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
     echo -e "${YELLOW}📦 Services: Open WebUI, Caddy, Authelia${NC}"
@@ -69,6 +69,17 @@ if [ "$HOST" = "rocketman" ]; then
     sudo mkdir -p /mnt/storage/media/audio /mnt/storage/media/.logs /mnt/storage/media/photos/library
     sudo chown -R pi:pi /mnt/storage/media
     [ -e ./services/immich/library ] || ln -s /mnt/storage/media/photos/library ./services/immich/library
+
+    # SigNoz observability data dirs (see services/signoz/)
+    SIGNOZ_DATA_LOCATION="${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}"
+    echo -e "${YELLOW}🏗️ Setting up SigNoz data dirs at ${SIGNOZ_DATA_LOCATION}...${NC}"
+    sudo mkdir -p \
+        "${SIGNOZ_DATA_LOCATION}/clickhouse/user_scripts" \
+        "${SIGNOZ_DATA_LOCATION}/zookeeper" \
+        "${SIGNOZ_DATA_LOCATION}/signoz" \
+        "${SIGNOZ_DATA_LOCATION}/alertmanager"
+    # ClickHouse and ZooKeeper run as uid 1000 in their images; signoz as well.
+    sudo chown -R 1000:1000 "${SIGNOZ_DATA_LOCATION}"
 fi
 
 # Generate configuration files from templates
@@ -85,6 +96,11 @@ docker compose $COMPOSE_FILES up -d
 # Check deployment status
 echo -e "${GREEN}✅ Checking deployment status...${NC}"
 docker compose $COMPOSE_FILES ps
+
+# Seed OpenWebUI model presets (idempotent; skips gracefully if OPENWEBUI_API_KEY unset)
+echo -e "${YELLOW}🌱 Seeding OpenWebUI presets...${NC}"
+chmod +x scripts/seed-openwebui.sh
+./scripts/seed-openwebui.sh "$HOST" || echo -e "${YELLOW}⚠️  Preset seeding skipped or failed (non-fatal — see output above)${NC}"
 
 echo ""
 echo -e "${GREEN}✅ Deployment to $HOST complete!${NC}"
