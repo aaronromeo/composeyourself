@@ -25,15 +25,19 @@ env vars that MUST be set on the host before deploy:
 
 **Tech Stack:** docker / docker compose, Tailscale (already running as a
 `network_mode: host` container named `tailscale`), bash. Host is arm64 Linux
-(Raspberry Pi). The deploy user is `pi`.
+(Raspberry Pi). The repo lives at **`/opt/docker/composeyourself`** and Docker is
+run as the user **`dockerops`**. Run all commands in this plan as `dockerops`
+(or a user in the `docker` group); `dockerops` must own the working copy and be
+able to invoke `sudo` for the data-dir setup steps in `deploy.sh`.
 
 ---
 
 ## Background context you need (read once)
 
 **Repo layout on the host:** The working copy is a normal git clone of
-`git@github.com:aaronromeo/composeyourself.git`. Find it before doing anything
-(Task 0). Inside it:
+`git@github.com:aaronromeo/composeyourself.git`, located at
+**`/opt/docker/composeyourself`** and owned by **`dockerops`**. Confirm it in
+Task 0 before doing anything. Inside it:
 - `docker-compose.yml` — base (tailscale only).
 - `docker-compose.rocketman.yml` — rocketman services: yt-dlp, announcements,
   swole, immich (server/ML/redis/postgres), **and the Phase 2 exporters**
@@ -79,24 +83,30 @@ files outside `.env` unless a task says so.
 
 **Files:** none (read-only investigation)
 
-- [ ] **Step 1: Find the working copy on the host**
+- [ ] **Step 1: Confirm the working copy and run as the right user**
 
-Run (try these in order; the first that prints a path wins):
+The repo lives at `/opt/docker/composeyourself` and Docker runs as `dockerops`.
+Run:
 
 ```bash
-ls -d ~/composeyourself 2>/dev/null \
-  || ls -d /opt/composeyourself 2>/dev/null \
-  || ls -d /home/pi/composeyourself 2>/dev/null \
-  || find / -maxdepth 4 -name docker-compose.rocketman.yml 2>/dev/null
+whoami   # expect: dockerops (or a user in the `docker` group)
+export REPO=/opt/docker/composeyourself
+test -f "$REPO/docker-compose.rocketman.yml" && echo "REPO OK: $REPO"
 ```
 
-Expected: a directory path containing `docker-compose.rocketman.yml`.
-Record it as `$REPO` for the rest of the plan. If multiple are found, pick the
-one that is a git repo with remote `aaronromeo/composeyourself`
-(`git -C <path> remote -v`).
+Expected: `REPO OK: /opt/docker/composeyourself`. If `whoami` is not `dockerops`,
+switch users first (e.g. `sudo -iu dockerops`) and re-run this plan as `dockerops`
+— it must own the working copy and be able to `docker` + `sudo`.
 
-If none found: STOP and report — the repo must be cloned first (out of scope
-for this plan; ask the human for the path).
+If the path test fails, fall back to locating it (then set `REPO` accordingly):
+
+```bash
+ls -d /opt/docker/composeyourself 2>/dev/null \
+  || find /opt /home -maxdepth 4 -name docker-compose.rocketman.yml 2>/dev/null
+```
+
+If still not found: STOP and report — the repo must be cloned to
+`/opt/docker/composeyourself` first (out of scope for this plan; ask the human).
 
 - [ ] **Step 2: Confirm git remote and current branch**
 
@@ -427,6 +437,13 @@ Expected: `TS_IP present (good)`. If `FAIL`, STOP and re-check Task 3 Step 6.
 `build --no-cache`, `up -d`, `ps`. The `down` will briefly stop immich/yt-dlp/etc
 too — this is expected and they come back up. ClickHouse + the schema migrator
 take a few minutes on a Pi; be patient.
+
+> **Note for the `dockerops` host:** `deploy.sh` runs `sudo chown -R pi:pi
+> /mnt/storage/media` (a pre-existing immich line). If this host has no `pi`
+> user/group, that command will fail and abort the deploy (`set -e`). If Step 1
+> aborts at `chown ... pi:pi`, STOP and report — do not edit `deploy.sh` here;
+> the human decides whether to create a `pi` user or adjust that line. The SigNoz
+> data dirs use numeric `chown 1000:1000`, which is user-agnostic and fine.
 
 - [ ] **Step 1: Run the deploy**
 
