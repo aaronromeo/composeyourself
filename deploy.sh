@@ -67,7 +67,7 @@ make sync-submodules
 if [ "$HOST" = "rocketman" ]; then
     echo -e "${YELLOW}🏗️ Setting up directories for rocketman...${NC}"
     sudo mkdir -p /mnt/storage/media/audio /mnt/storage/media/.logs /mnt/storage/media/photos/library
-    sudo chown -R pi:pi /mnt/storage/media
+    sudo chown -R dockerops:dockerops /mnt/storage/media
     [ -e ./services/immich/library ] || ln -s /mnt/storage/media/photos/library ./services/immich/library
 
     # SigNoz observability data dirs (see services/signoz/)

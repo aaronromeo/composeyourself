@@ -25,6 +25,7 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
+      - TS_USERSPACE=false
     # Tailscale provides inter-host connectivity
     # All services can communicate via Tailscale IPs/hostnames
 

@@ -4,6 +4,10 @@ services/agenticui/*
 !services/agenticui/.keep
 services/authelia/users_database.yml
 services/authelia/configuration.yml
+# Authelia OIDC keypair (generated per-host by generate_config.sh; secret)
+services/authelia/keys/
+# Immich runtime data directory (host state)
+services/immich/library/
 *.log
 *.bak
 .DS_Store

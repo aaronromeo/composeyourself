@@ -39,88 +39,93 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
-# --- OIDC Keys ---
-echo -e "${YELLOW}Generating OIDC keys...${NC}"
-sudo rm -rf services/authelia/keys 2> /dev/null
-mkdir -p services/authelia/keys
-openssl genrsa -out services/authelia/keys/private.pem 2048
-openssl rsa -in services/authelia/keys/private.pem -outform PEM -pubout -out services/authelia/keys/public.pem
-cat services/authelia/keys/private.pem | sed '/----/d' | tr -d '\n' > services/authelia/keys/private.b64
-
-# --- OIDC Client Secret Hash ---
-OAUTH_CLIENT_SECRET_DIGEST=$(docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2 --password "${OAUTH_CLIENT_SECRET}" --no-confirm | sed -e "s|Digest: ||")
-export OAUTH_CLIENT_SECRET_DIGEST
-
-# --- Users Database ---
-if [ -f services/authelia/users_database.yml ]; then
-    echo -e "${GREEN}  ✓ users_database.yml already exists, skipping (preserving existing passwords)${NC}"
+# --- Authelia (only on hosts that run it, i.e. OAUTH_CLIENT_SECRET is set) ---
+if [ -z "${OAUTH_CLIENT_SECRET}" ]; then
+    echo -e "${GREEN}  ✓ OAUTH_CLIENT_SECRET not set — skipping Authelia config (not needed on this host)${NC}"
 else
-    echo -e "${YELLOW}Generating users_database.yml (first-time setup)...${NC}"
+    # --- OIDC Keys ---
+    echo -e "${YELLOW}Generating OIDC keys...${NC}"
+    sudo rm -rf services/authelia/keys 2> /dev/null
+    mkdir -p services/authelia/keys
+    openssl genrsa -out services/authelia/keys/private.pem 2048
+    openssl rsa -in services/authelia/keys/private.pem -outform PEM -pubout -out services/authelia/keys/public.pem
+    cat services/authelia/keys/private.pem | sed '/----/d' | tr -d '\n' > services/authelia/keys/private.b64
 
-    # Get the admin password - from env var or interactive prompt
-    if [ -n "$AUTHELIA_ADMIN_PASSWORD" ]; then
-        ADMIN_PASSWORD="$AUTHELIA_ADMIN_PASSWORD"
-        echo "  Using admin password from AUTHELIA_ADMIN_PASSWORD environment variable"
+    # --- OIDC Client Secret Hash ---
+    OAUTH_CLIENT_SECRET_DIGEST=$(docker run --rm authelia/authelia:latest authelia crypto hash generate pbkdf2 --password "${OAUTH_CLIENT_SECRET}" --no-confirm | sed -e "s|Digest: ||")
+    export OAUTH_CLIENT_SECRET_DIGEST
+
+    # --- Users Database ---
+    if [ -f services/authelia/users_database.yml ]; then
+        echo -e "${GREEN}  ✓ users_database.yml already exists, skipping (preserving existing passwords)${NC}"
     else
-        # Interactive prompt - only works when called from a terminal
-        if [ -t 0 ]; then
-            echo ""
-            echo -e "${YELLOW}  Set the initial admin password for Authelia.${NC}"
-            echo "  (Minimum 8 characters, must include uppercase, lowercase, number, and special character)"
-            echo ""
-            while true; do
-                read -s -p "  Enter admin password: " ADMIN_PASSWORD
-                echo ""
-                read -s -p "  Confirm admin password: " ADMIN_PASSWORD_CONFIRM
-                echo ""
-                if [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD_CONFIRM" ]; then
-                    if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
-                        break
-                    else
-                        echo -e "${RED}  Password must be at least 8 characters. Try again.${NC}"
-                    fi
-                else
-                    echo -e "${RED}  Passwords do not match. Try again.${NC}"
-                fi
-            done
+        echo -e "${YELLOW}Generating users_database.yml (first-time setup)...${NC}"
+
+        # Get the admin password - from env var or interactive prompt
+        if [ -n "$AUTHELIA_ADMIN_PASSWORD" ]; then
+            ADMIN_PASSWORD="$AUTHELIA_ADMIN_PASSWORD"
+            echo "  Using admin password from AUTHELIA_ADMIN_PASSWORD environment variable"
         else
-            echo -e "${RED}Error: No terminal available for password input and AUTHELIA_ADMIN_PASSWORD is not set.${NC}"
-            echo "Set AUTHELIA_ADMIN_PASSWORD in your environment or .env file for non-interactive use."
+            # Interactive prompt - only works when called from a terminal
+            if [ -t 0 ]; then
+                echo ""
+                echo -e "${YELLOW}  Set the initial admin password for Authelia.${NC}"
+                echo "  (Minimum 8 characters, must include uppercase, lowercase, number, and special character)"
+                echo ""
+                while true; do
+                    read -s -p "  Enter admin password: " ADMIN_PASSWORD
+                    echo ""
+                    read -s -p "  Confirm admin password: " ADMIN_PASSWORD_CONFIRM
+                    echo ""
+                    if [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD_CONFIRM" ]; then
+                        if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
+                            break
+                        else
+                            echo -e "${RED}  Password must be at least 8 characters. Try again.${NC}"
+                        fi
+                    else
+                        echo -e "${RED}  Passwords do not match. Try again.${NC}"
+                    fi
+                done
+            else
+                echo -e "${RED}Error: No terminal available for password input and AUTHELIA_ADMIN_PASSWORD is not set.${NC}"
+                echo "Set AUTHELIA_ADMIN_PASSWORD in your environment or .env file for non-interactive use."
+                exit 1
+            fi
+        fi
+
+        # Hash the password using Authelia's built-in tool
+        echo "  Hashing admin password..."
+        ADMIN_PASSWORD_HASH=$(docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password "${ADMIN_PASSWORD}" --no-confirm | sed -e "s|Digest: ||")
+
+        if [ -z "$ADMIN_PASSWORD_HASH" ] || [ "$ADMIN_PASSWORD_HASH" = "" ]; then
+            echo -e "${RED}Error: Failed to generate password hash${NC}"
             exit 1
         fi
+
+        # Substitute placeholders into the template
+        sed -e "s|\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" \
+            -e "s|\${ADMIN_PASSWORD_HASH}|${ADMIN_PASSWORD_HASH}|g" \
+            services/authelia/users_database.yml.template \
+            > services/authelia/users_database.yml
+
+        # Restrict permissions - file contains password hashes
+        chmod 600 services/authelia/users_database.yml
+
+        echo -e "${GREEN}  ✓ Generated users_database.yml with email: ${AUTHELIA_ADMIN_EMAIL}${NC}"
+
+        # Clear sensitive variables
+        unset ADMIN_PASSWORD ADMIN_PASSWORD_CONFIRM ADMIN_PASSWORD_HASH
     fi
 
-    # Hash the password using Authelia's built-in tool
-    echo "  Hashing admin password..."
-    ADMIN_PASSWORD_HASH=$(docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password "${ADMIN_PASSWORD}" --no-confirm | sed -e "s|Digest: ||")
+    # --- Configuration ---
+    echo "Generating configuration.yml..."
+    envsubst '$DOMAIN $SUBDOMAIN $OAUTH_CLIENT_SECRET_DIGEST $AUTHELIA_ADMIN_EMAIL $AUTHELIA_SMTP_USERNAME $AUTHELIA_SMTP_PASSWORD $AUTHELIA_SMTP_SENDER $AUTHELIA_NOTIFIER_SMTP_SENDER' \
+      < services/authelia/configuration.yml.template \
+      > services/authelia/configuration.yml
 
-    if [ -z "$ADMIN_PASSWORD_HASH" ] || [ "$ADMIN_PASSWORD_HASH" = "" ]; then
-        echo -e "${RED}Error: Failed to generate password hash${NC}"
-        exit 1
-    fi
-
-    # Substitute placeholders into the template
-    sed -e "s|\${AUTHELIA_ADMIN_EMAIL}|${AUTHELIA_ADMIN_EMAIL}|g" \
-        -e "s|\${ADMIN_PASSWORD_HASH}|${ADMIN_PASSWORD_HASH}|g" \
-        services/authelia/users_database.yml.template \
-        > services/authelia/users_database.yml
-
-    # Restrict permissions - file contains password hashes
-    chmod 600 services/authelia/users_database.yml
-
-    echo -e "${GREEN}  ✓ Generated users_database.yml with email: ${AUTHELIA_ADMIN_EMAIL}${NC}"
-
-    # Clear sensitive variables
-    unset ADMIN_PASSWORD ADMIN_PASSWORD_CONFIRM ADMIN_PASSWORD_HASH
+    echo -e "${GREEN}  ✓ Generated configuration.yml with domain: ${DOMAIN}${NC}"
 fi
-
-# --- Configuration ---
-echo "Generating configuration.yml..."
-envsubst '$DOMAIN $SUBDOMAIN $OAUTH_CLIENT_SECRET_DIGEST $AUTHELIA_ADMIN_EMAIL $AUTHELIA_SMTP_USERNAME $AUTHELIA_SMTP_PASSWORD $AUTHELIA_SMTP_SENDER $AUTHELIA_NOTIFIER_SMTP_SENDER' \
-  < services/authelia/configuration.yml.template \
-  > services/authelia/configuration.yml
-
-echo -e "${GREEN}  ✓ Generated configuration.yml with domain: ${DOMAIN}${NC}"
 
 # --- OpenWebUI default model seed ---
 # Copy the committed config.json into the bind-mounted data dir so OWUI imports
