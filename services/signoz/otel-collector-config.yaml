@@ -1,13 +1,24 @@
-# SigNoz OTel Collector config (rocketman) — Phase 1
+# SigNoz OTel Collector config (rocketman) — aligned with signoz-otel-collector v0.144.5
 #
-# Adapted from SigNoz upstream deploy/docker/otel-collector-config.yaml for the
-# pinned signoz-otel-collector v0.144.5. ClickHouse DSNs point at the
-# signoz-clickhouse container on the cys-service network.
-#
-# Current component names (NOT the deprecated ones):
-#   - signozspanmetrics/delta        (delta variant, not cumulative)
-#   - signozclickhousemetrics        (renamed from clickhousemetricswrite)
-#   - clickhousetraces / clickhouselogsexporter
+# Derived from the official SigNoz v0.129.0 reference:
+#   deploy/docker/otel-collector-config.yaml
+# with the following rocketman additions:
+#   - prometheus receiver: scrape cadvisor, node-exporter, postgres-exporter,
+#     redis-exporter via the cys-service docker network.
+#   - filelog receiver: ship Docker container logs from the host bind-mount.
+#   - memory_limiter processor: cap collector at 800 MiB (compose limit 1 G).
+#   - resourcedetection/system: add env + host labels.
+#   - signozspanmetrics/delta: derive RED metrics from trace spans.
+#   - All ClickHouse DSNs use signoz-clickhouse:9000 (NOT clickhouse:9000).
+#   - No service.telemetry.metrics block (removed in v0.144.5 schema).
+
+connectors:
+  signozmeter:
+    metrics_flush_interval: 1h
+    dimensions:
+      - name: service.name
+      - name: deployment.environment
+      - name: host.name
 
 receivers:
   otlp:
@@ -18,14 +29,15 @@ receivers:
         endpoint: 0.0.0.0:4318
 
   # ---------------------------------------------------------------------------
-  # Phase 2: scrape the rocketman exporters. Targets resolve over the
-  # cys-service docker network by DNS name. scrape_configs are inline (the
-  # signoz-otel-collector prometheus receiver consumes a standard Prometheus
-  # `config:` block — there is no supported `config_file` field). The skeleton
-  # services/signoz/prometheus.yml is kept as documentation only.
+  # Prometheus: scrape the rocketman exporters over the cys-service docker
+  # network. Targets resolve by DNS name. There is no supported config_file
+  # field on the prometheus receiver — scrape_configs must be inline.
+  # The skeleton services/signoz/prometheus.yml is documentation only.
   # ---------------------------------------------------------------------------
   prometheus:
     config:
+      global:
+        scrape_interval: 60s
       scrape_configs:
         - job_name: cadvisor
           scrape_interval: 15s
@@ -45,21 +57,11 @@ receivers:
             - targets: [redis-exporter:9121]
 
   # ---------------------------------------------------------------------------
-  # Phase 2: ship Docker container logs. The host's container log directory is
-  # bind-mounted read-only into the collector (see docker-compose.signoz.yml).
-  # Uses the modern `container` operator (format: docker) instead of the
-  # deprecated manual json_parser/regex_parser operators.
-  #
-  # add_metadata_from_filepath is disabled: it only extracts the k8s pod-path
-  # layout, which does not match Docker host paths. To still get a usable label,
-  # a regex operator lifts the 64-hex container ID out of the file path into
-  # `container.id` so logs are correlatable in the SigNoz UI.
-  #
-  # FOLLOW-UP (post-Phase 2): to surface the human-readable container *name*
-  # (Phase 2 exit criterion), switch to the receiver_creator + docker_observer
-  # pattern, which discovers running containers and injects container.name /
-  # container.image.name. Deferred because it needs the Docker socket mounted
-  # and is best validated on the live host.
+  # filelog: ship Docker container logs. The host's /var/lib/docker/containers
+  # is bind-mounted read-only (see docker-compose.signoz.yml).
+  # Uses the `container` operator (format: docker) for log parsing.
+  # add_metadata_from_filepath is disabled — it expects a k8s path layout.
+  # A regex operator lifts the 64-hex container ID into container.id instead.
   # ---------------------------------------------------------------------------
   filelog:
     include:
@@ -86,15 +88,23 @@ processors:
     send_batch_size: 10000
     send_batch_max_size: 11000
     timeout: 10s
+
+  batch/meter:
+    send_batch_max_size: 25000
+    send_batch_size: 20000
+    timeout: 1s
+
   memory_limiter:
     check_interval: 2s
-    # Keep under the 1G compose limit for this container.
+    # Keep under the 1 G compose limit for this container.
     limit_mib: 800
     spike_limit_mib: 200
+
   resourcedetection/system:
     # env detector adds OTEL_RESOURCE_ATTRIBUTES labels; system adds host info.
     detectors: [env, system]
     timeout: 2s
+
   signozspanmetrics/delta:
     metrics_exporter: signozclickhousemetrics
     metrics_flush_interval: 60s
@@ -130,21 +140,32 @@ exporters:
     datasource: tcp://signoz-clickhouse:9000/signoz_traces
     low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
     use_new_schema: true
+
   signozclickhousemetrics:
     dsn: tcp://signoz-clickhouse:9000/signoz_metrics
+
   clickhouselogsexporter:
     dsn: tcp://signoz-clickhouse:9000/signoz_logs
     timeout: 10s
     use_new_schema: true
 
+  signozclickhousemeter:
+    dsn: tcp://signoz-clickhouse:9000/signoz_meter
+    timeout: 45s
+    sending_queue:
+      enabled: false
+
+  metadataexporter:
+    cache:
+      provider: in_memory
+    dsn: tcp://signoz-clickhouse:9000/signoz_metadata
+    enabled: true
+    timeout: 45s
+
 service:
   telemetry:
     logs:
       encoding: json
-    metrics:
-      # Internal collector telemetry — exposed on 8888, bound to 127.0.0.1 by
-      # the compose port mapping.
-      address: 0.0.0.0:8888
   extensions:
     - health_check
     - pprof
@@ -152,12 +173,20 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, signozspanmetrics/delta, resourcedetection/system, batch]
-      exporters: [clickhousetraces]
+      exporters: [clickhousetraces, metadataexporter, signozmeter]
     metrics:
-      receivers: [otlp, prometheus]
+      receivers: [otlp]
       processors: [memory_limiter, resourcedetection/system, batch]
-      exporters: [signozclickhousemetrics]
+      exporters: [signozclickhousemetrics, metadataexporter, signozmeter]
+    metrics/prometheus:
+      receivers: [prometheus]
+      processors: [memory_limiter, resourcedetection/system, batch]
+      exporters: [signozclickhousemetrics, metadataexporter, signozmeter]
     logs:
       receivers: [otlp, filelog]
       processors: [memory_limiter, resourcedetection/system, batch]
-      exporters: [clickhouselogsexporter]
+      exporters: [clickhouselogsexporter, metadataexporter, signozmeter]
+    metrics/meter:
+      receivers: [signozmeter]
+      processors: [batch/meter]
+      exporters: [signozclickhousemeter]
