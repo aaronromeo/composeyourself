@@ -91,10 +91,10 @@ services:
     environment:
       - CLICKHOUSE_SKIP_USER_SETUP=1
     volumes:
-      - ./clickhouse-config.xml:/etc/clickhouse-server/config.xml
-      - ./clickhouse-users.xml:/etc/clickhouse-server/users.xml
-      - ./clickhouse-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
-      - ./clickhouse-custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - ./services/signoz/clickhouse-config.xml:/etc/clickhouse-server/config.xml
+      - ./services/signoz/clickhouse-users.xml:/etc/clickhouse-server/users.xml
+      - ./services/signoz/clickhouse-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - ./services/signoz/clickhouse-custom-function.xml:/etc/clickhouse-server/custom-function.xml
       - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
       - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/clickhouse:/var/lib/clickhouse/
     healthcheck:
@@ -167,7 +167,7 @@ services:
         /signoz-otel-collector migrate sync check &&
         /signoz-otel-collector --config=/etc/otel-collector-config.yaml
     volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./services/signoz/otel-collector-config.yaml:/etc/otel-collector-config.yaml
       # Phase 2: Docker container logs for the filelog receiver (read-only).
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     ports:
@@ -209,7 +209,7 @@ services:
       # env vars directly. TODO(verify): wire retention once the UI exposes the
       # settings API endpoint we automate against (Phase 6).
     volumes:
-      - ./alertmanager.yml:/etc/signoz/alertmanager.yml
+      - ./services/signoz/alertmanager.yml:/etc/signoz/alertmanager.yml
       - ${SIGNOZ_DATA_LOCATION:-/mnt/storage/signoz}/signoz:/var/lib/signoz/
     ports:
       # UI bound to the tailnet IP in prod (defaults to 0.0.0.0 for local dev).
