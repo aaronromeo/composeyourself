@@ -9,7 +9,7 @@
 <clickhouse>
     <logger>
         <!-- Levels: none|fatal|critical|error|warning|notice|information|debug|trace|test -->
-        <level>information</level>
+        <level>warning</level>
         <formatting>
             <type>json</type>
         </formatting>
