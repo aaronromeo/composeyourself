@@ -113,6 +113,11 @@ services:
         limits:
           cpus: '2.00'
           memory: 4G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     networks:
       - cys-service
 
