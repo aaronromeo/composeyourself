@@ -9,6 +9,11 @@
 
 set -e
 
+# Lock file to prevent concurrent runs (used by cron)
+LOCKFILE="/tmp/composeyourself-update.lock"
+exec 200>"$LOCKFILE"
+flock -n 200 || { echo "Another update is already running — exiting."; exit 0; }
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -51,7 +56,14 @@ elif [ "$HOST" = "sweetpaintedlady" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
 fi
 
-# Pull latest changes
+# Check for upstream changes before pulling
+echo -e "${YELLOW}🔄 Checking for upstream changes...${NC}"
+git fetch -q
+if [ "$(git rev-parse HEAD)" = "$(git rev-parse '@{u}' 2>/dev/null)" ]; then
+    echo -e "${GREEN}✅ Already up to date — nothing to do.${NC}"
+    exit 0
+fi
+
 echo -e "${YELLOW}🔄 Pulling latest changes...${NC}"
 git pull
 
@@ -73,7 +85,7 @@ docker compose $COMPOSE_FILES down
 docker compose $COMPOSE_FILES pull --ignore-buildable || true
 
 # Build locally since some services use local Dockerfiles
-docker compose $COMPOSE_FILES build --no-cache
+docker compose $COMPOSE_FILES build
 docker compose $COMPOSE_FILES up -d
 
 echo ""
