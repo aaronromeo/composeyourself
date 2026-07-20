@@ -43,18 +43,25 @@ CF="-f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/doc
 sg dockerops -c "docker compose $CF <subcommand>"
 ```
 
-## What is ALREADY fixed on disk (uncommitted — do NOT redo)
+## What is ALREADY fixed on disk (COMMITTED — do NOT redo)
 
-These edits are present in the working tree (`git diff` shows them). They are
-correct and verified working. **Leave them; Task 4 commits them.**
+> **Verified Jun 21 2026:** These edits were confirmed **committed** (not merely
+> uncommitted on-disk) by SSH inspection of the rocketman host. Both the local
+> repo and rocketman are at commit `d9c6807` with a clean working tree. The
+> original plan said "uncommitted / git diff shows them" — that was accurate when
+> the plan was authored mid-session, but the session ended by committing them.
+> The four fixes landed in:
+> - `05c4231` — deploy.sh, docker-compose.yml, generate_config.sh
+> - `d9c6807` — services/signoz/docker-compose.signoz.yml (bind-mount paths)
 
 1. **`deploy.sh`**: `chown -R pi:pi` → `chown -R dockerops:dockerops` (host has no
-   `pi` user).
+   `pi` user). *(committed in `05c4231`)*
 2. **`docker-compose.yml`**: added `TS_USERSPACE=false` to the `tailscale` service.
    *Why:* the container was defaulting to `--tun=userspace-networking`, so no
    `tailscale0` kernel interface existed, so Docker could not bind container ports
    to `100.109.74.20` ("cannot assign requested address"). With `TS_USERSPACE=false`
-   the `tailscale0` interface appears and port binding works.
+   the `tailscale0` interface appears and port binding works. *(committed in
+   `05c4231`)*
 3. **`services/signoz/docker-compose.signoz.yml`**: six bind-mount sources changed
    from `./<file>` to `./services/signoz/<file>` (clickhouse-config.xml,
    clickhouse-users.xml, clickhouse-cluster.xml, clickhouse-custom-function.xml,
@@ -63,11 +70,13 @@ correct and verified working. **Leave them; Task 4 commits them.**
    not the overlay file's dir. The files live in `services/signoz/`, so `./x`
    pointed at a non-existent repo-root path and Docker auto-created empty
    **directories** there, breaking the mounts ("is a directory" errors).
+   *(committed in `d9c6807`)*
 4. **`generate_config.sh`**: the Authelia block (OIDC keys, users_database.yml,
    configuration.yml) is now wrapped in `if [ -z "${OAUTH_CLIENT_SECRET}" ]; then
    skip; else ...; fi`. *Why:* rocketman does not run Authelia and has no
    `OAUTH_CLIENT_SECRET`; the old script prompted for an Authelia admin password
    (no TTY → abort) and passed an empty `--password` to `authelia crypto hash`.
+   *(committed in `05c4231`)*
 
 ### Host-only state already set (NOT in git, already done)
 
@@ -333,7 +342,13 @@ Expected: `UI OK AFTER RESTART` and collector `running`.
 
 ### Task 4: Commit the working changes
 
-**Files:** commits the 4 already-modified tracked files + the new collector config.
+**Files:** commits the new collector config + ClickHouse pin bump (the 4
+host-prereq files are already committed — see "What is ALREADY fixed" above).
+
+> **Verified Jun 21 2026:** `deploy.sh`, `docker-compose.yml`, `generate_config.sh`,
+> and the bind-mount path fix in `services/signoz/docker-compose.signoz.yml` are
+> all already committed (`05c4231`, `d9c6807`). Task 4 here covers only the
+> remaining uncommitted changes produced by Tasks 1 and this step's CH-pin work.
 
 > Hard rules: NEVER commit `.env`, the `.env.bak.*` backups, or the
 > `SIGNOZ_JWT_SECRET`. Do NOT `git push` unless the operator asks.
@@ -343,62 +358,58 @@ Expected: `UI OK AFTER RESTART` and collector `running`.
 ```bash
 cd /opt/docker/composeyourself
 sg dockerops -c "git status --short"
-sg dockerops -c "git diff --stat -- deploy.sh docker-compose.yml generate_config.sh services/signoz/docker-compose.signoz.yml services/signoz/otel-collector-config.yaml"
+sg dockerops -c "git diff --stat -- services/signoz/otel-collector-config.yaml services/signoz/docker-compose.signoz.yml .env.example services/signoz/VERSIONS.md"
 ```
 
-Confirm ONLY these five files are staged below. If `git status` shows `.env`,
-`.env.bak.*`, or stray root-level `clickhouse-*.xml` / `otel-collector-config.yaml`
-/ `alertmanager.yml` (leftover Docker-created dirs), do NOT add them. Remove stray
-root-level config dirs if present:
+Confirm ONLY the collector config and CH-pin files are staged. If `git status`
+shows `.env`, `.env.bak.*`, or stray root-level `clickhouse-*.xml` /
+`otel-collector-config.yaml` / `alertmanager.yml` (leftover Docker-created dirs),
+do NOT add them. Remove stray root-level config dirs if present:
 `sudo rm -rf clickhouse-*.xml otel-collector-config.yaml alertmanager.yml`
 (only if they are at the **repo root**, not under `services/signoz/`).
 
-- [ ] **Step 2: Stage and commit**
-
-```bash
-sg dockerops -c "git add deploy.sh docker-compose.yml generate_config.sh services/signoz/docker-compose.signoz.yml services/signoz/otel-collector-config.yaml"
-sg dockerops -c "git commit -m 'fix(otel): land SigNoz stack on rocketman (x86_64)
-
-- collector config: align with signoz-otel-collector v0.144.5 (drop
-  service.telemetry.metrics.address; add signozmeter connector,
-  signozclickhousemeter + metadataexporter; new pipelines). Keep rocketman
-  prometheus scrape + filelog receiver. DSNs use signoz-clickhouse:9000.
-- compose: fix six config bind-mount paths (./ -> ./services/signoz/) so they
-  resolve against the project dir (repo root) instead of creating empty dirs.
-- tailscale: TS_USERSPACE=false so tailscale0 kernel iface exists and Docker can
-  bind container ports to the tailnet IP.
-- generate_config.sh: skip Authelia block when OAUTH_CLIENT_SECRET unset
-  (rocketman runs no Authelia).
-- deploy.sh: chown media to dockerops (host has no pi user).'"
-sg dockerops -c "git log --oneline -1"
-```
-
-- [ ] **Step 3: Also bump the ClickHouse pin in committed templates (so a fresh
-  clone deploys correctly)**
+- [ ] **Step 2: Bump the ClickHouse pin in committed templates (so a fresh clone
+  deploys correctly)**
 
 The working `CLICKHOUSE_VERSION=25.5.6` currently lives only in the host `.env`.
 Update the committed default + docs so future deploys don't regress to 24.1.2:
 
 ```bash
 cd /opt/docker/composeyourself
-# Update the compose default(s):
-grep -rn 'CLICKHOUSE_VERSION:-24.1.2-alpine' services/signoz/docker-compose.signoz.yml
+# Update the compose defaults (2 occurrences: signoz-init-clickhouse, signoz-clickhouse):
 sg dockerops -c "sed -i 's/CLICKHOUSE_VERSION:-24.1.2-alpine/CLICKHOUSE_VERSION:-25.5.6/g' services/signoz/docker-compose.signoz.yml"
-# Update VERSIONS.md and .env.example if they mention 24.1.2:
-grep -rln '24.1.2' .env.example services/signoz/VERSIONS.md 2>/dev/null
+# Update VERSIONS.md and .env.example:
+sg dockerops -c "sed -i 's/24.1.2-alpine/25.5.6/g' .env.example services/signoz/VERSIONS.md"
+# Update the VERSIONS.md ClickHouse note to explain why (arm64/Pi note is now moot — rocketman is x86_64):
+# Edit services/signoz/VERSIONS.md line 24 to read:
+# "SigNoz v0.129.0 ships ClickHouse 25.5.6; 24.1.2 is too old for the v0.144.5
+# migrator's JSON(max_dynamic_paths=100) DDL (fails: code 62 syntax error)."
 ```
 
-For each file that mentions `24.1.2`, change the pin to `25.5.6` and (in
-`VERSIONS.md`) note: "SigNoz v0.129.0 ships ClickHouse 25.5.6; 24.1.2 is too old
-for the v0.144.5 migrator's JSON(max_dynamic_paths) DDL." Then amend the commit:
+Verify:
+```bash
+sg dockerops -c "grep -c '24.1.2' services/signoz/docker-compose.signoz.yml .env.example services/signoz/VERSIONS.md"
+```
+Expected: all zero.
+
+- [ ] **Step 3: Stage and commit**
 
 ```bash
-sg dockerops -c "git add services/signoz/docker-compose.signoz.yml .env.example services/signoz/VERSIONS.md"
-sg dockerops -c "git commit --amend --no-edit"
-sg dockerops -c "git show --stat HEAD | head -20"
-```
+sg dockerops -c "git add services/signoz/otel-collector-config.yaml services/signoz/docker-compose.signoz.yml .env.example services/signoz/VERSIONS.md"
+sg dockerops -c "git commit -m 'fix(otel): align collector config with v0.144.5; bump ClickHouse pin
 
-(If a file doesn't mention 24.1.2, skip it — don't force an edit.)
+- otel-collector-config.yaml: drop service.telemetry.metrics.address (crash fix
+  for signoz-otel-collector v0.144.5); add signozmeter connector,
+  signozclickhousemeter + metadataexporter exporters, batch/meter processor, and
+  five-pipeline service config matching the official v0.129.0 layout. Keep
+  rocketman prometheus scrape targets (cadvisor, node-exporter, postgres-exporter,
+  redis-exporter) and filelog receiver. All DSNs use signoz-clickhouse:9000.
+- docker-compose.signoz.yml + .env.example + VERSIONS.md: bump committed
+  CLICKHOUSE_VERSION default 24.1.2-alpine -> 25.5.6. 24.1.2 is too old for the
+  v0.144.5 migrator JSON(max_dynamic_paths=100) DDL (code 62 syntax error). Fresh
+  clones now get the correct version without a manual .env override.'"
+sg dockerops -c "git log --oneline -1"
+```
 
 ---
 
