@@ -76,6 +76,10 @@ echo -e "${YELLOW}⚙️ Regenerating configuration files...${NC}"
 chmod +x generate_config.sh
 ./generate_config.sh
 
+# Validate compose config (catches bad YAML / missing env vars before the expensive build)
+echo -e "${YELLOW}⚙️ Validating compose configuration...${NC}"
+docker compose $COMPOSE_FILES config > /dev/null && echo -e "${GREEN}✅ Config OK${NC}" || { echo -e "${RED}❌ Config validation failed${NC}"; exit 1; }
+
 # Rebuild and restart
 echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
 docker compose $COMPOSE_FILES down
