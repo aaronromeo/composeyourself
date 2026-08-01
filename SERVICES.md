@@ -66,7 +66,7 @@ the container user (root) can write to it.
 
 ### yt-dlp Web Interface
 - **Location**: `services/yt-dlp/`
-- **Port**: 8080
+- **Port**: 8082 (host) / 8080 (container)
 - **Purpose**: Download videos/audio from YouTube and other sites
 - **Features**: Web UI, queue management, audio extraction, progress monitoring
 
@@ -144,7 +144,7 @@ To avoid conflicts, here's the planned port allocation:
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| yt-dlp | 8080 | Video/audio downloader |
+| yt-dlp | 8082 | Video/audio downloader |
 | Jellyfin | 8096 | Media server |
 | qBittorrent | 8081 | Torrent web UI |
 | Portainer | 9000 | Docker management |
@@ -196,7 +196,7 @@ All services can be exposed through Cloudflare tunnels:
 # /etc/cloudflared/config.yml
 ingress:
   - hostname: ytdlp.romeothedarkhorse.ca
-    service: http://localhost:8080
+    service: http://localhost:8082
   - hostname: jellyfin.romeothedarkhorse.ca
     service: http://localhost:8096
   - hostname: files.romeothedarkhorse.ca

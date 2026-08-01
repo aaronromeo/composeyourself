@@ -70,8 +70,9 @@ Preset seeding (`scripts/seed-openwebui.sh`) requires an `OPENWEBUI_API_KEY` in 
 - Collector + schema-migrator versions are pinned by the same env var and must be
   bumped as a pair (`SIGNOZ_OTEL_COLLECTOR_VERSION`); ClickHouse must be ≥25.5.6 for
   that migrator (JSON DDL). Pins and rationale live in `services/signoz/VERSIONS.md`.
-- `SIGNOZ_BIND_ADDR` default `0.0.0.0` collides with yt-dlp on `:8080` — set it to
-  rocketman's Tailscale IP in prod. Same for `TAILNET_BIND_ADDR` (kernel TUN mode no
+- `SIGNOZ_BIND_ADDR` default `0.0.0.0` exposes the SigNoz UI/OTLP on every interface —
+  set it to rocketman's Tailscale IP in prod. (yt-dlp no longer collides: it moved to
+  host `:8082`.) Same for `TAILNET_BIND_ADDR` (kernel TUN mode no
   longer proxies inbound tailnet connections to `127.0.0.1`). Services that bind a
   tailnet IP gate on the `tailscale` healthcheck (`tailscale ip -4`) via `depends_on:
   condition: service_healthy` — after `down` the tailnet interface is gone until the

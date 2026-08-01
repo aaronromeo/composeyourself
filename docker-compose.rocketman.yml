@@ -27,7 +27,8 @@ services:
     restart: unless-stopped
     logging: *default-logging
     ports:
-      - "8080:8080"
+      # Host 8080 is SigNoz's UI — yt-dlp maps to 8082.
+      - "8082:8080"
     volumes:
       # Video downloads
       - /mnt/storage/media/downloads:/downloads

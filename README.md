@@ -279,7 +279,7 @@ sudo journalctl -u composeyourself-sweetpaintedlady.service -f
 
 All services are accessible only via Tailscale network:
 
-- **yt-dlp**: http://rocketman:8080
+- **yt-dlp**: http://rocketman:8082
 - **announcements**: http://rocketman:8091
 - **immich**: http://rocketman:2283
 
