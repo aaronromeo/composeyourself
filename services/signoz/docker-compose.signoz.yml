@@ -153,6 +153,8 @@ services:
     container_name: signoz-otel-collector
     restart: unless-stopped
     depends_on:
+      tailscale:
+        condition: service_healthy
       signoz-clickhouse:
         condition: service_healthy
       signoz-schema-migrator:
@@ -196,6 +198,8 @@ services:
     container_name: signoz
     restart: unless-stopped
     depends_on:
+      tailscale:
+        condition: service_healthy
       signoz-clickhouse:
         condition: service_healthy
       signoz-otel-collector:

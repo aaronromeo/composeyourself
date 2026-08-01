@@ -26,6 +26,17 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:-}
       - TS_USERSPACE=false
+    # Healthy only once tailscaled has a tailnet IPv4. Services that publish a
+    # host port bound to the tailnet IP (TAILNET_BIND_ADDR / SIGNOZ_BIND_ADDR)
+    # must wait for this: after `docker compose down` removes this container the
+    # host's tailscale0 interface (and its 100.x IP) disappears, so binding the
+    # IP too early fails with "cannot assign requested address".
+    healthcheck:
+      test: ["CMD", "tailscale", "ip", "-4"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     # Tailscale provides inter-host connectivity
     # All services can communicate via Tailscale IPs/hostnames
 

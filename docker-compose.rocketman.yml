@@ -70,6 +70,11 @@ services:
     logging: *default-logging
     ports:
       - "${TAILNET_BIND_ADDR:-127.0.0.1}:8091:8091"
+    # Bound to the tailnet IP — wait for tailscale to bring up the interface
+    # (see docker-compose.yml tailscale healthcheck).
+    depends_on:
+      tailscale:
+        condition: service_healthy
     environment:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - PORT=8091
@@ -91,6 +96,11 @@ services:
     logging: *default-logging
     ports:
       - "${TAILNET_BIND_ADDR:-127.0.0.1}:8090:8080"
+    # Bound to the tailnet IP — wait for tailscale to bring up the interface
+    # (see docker-compose.yml tailscale healthcheck).
+    depends_on:
+      tailscale:
+        condition: service_healthy
     volumes:
       - ./services/swole/data:/app/data
     environment:
@@ -240,6 +250,11 @@ services:
       - /:/rootfs:ro
     ports:
       - "${SIGNOZ_BIND_ADDR:-0.0.0.0}:9100:9100"
+    # Bound to the tailnet IP — wait for tailscale to bring up the interface
+    # (see docker-compose.yml tailscale healthcheck).
+    depends_on:
+      tailscale:
+        condition: service_healthy
     deploy:
       resources:
         limits:
