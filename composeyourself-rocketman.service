@@ -12,10 +12,13 @@ Group=dockerops
 WorkingDirectory=/opt/docker/composeyourself
 Environment="HOME=/opt/docker"
 Environment="DOCKER_HOST=unix:///var/run/docker.sock"
-# Use multiple compose files: base + rocketman-specific
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml down
-TimeoutStartSec=300
+# Use multiple compose files: base + rocketman-specific + signoz overlay.
+# The signoz overlay is included so a boot/systemctl restart brings up the
+# full stack (incl. observability). up -d blocks on the signoz one-shot
+# containers (clickhouse health + schema migration), hence the long timeout.
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml down
+TimeoutStartSec=900
 TimeoutStopSec=120
 
 [Install]

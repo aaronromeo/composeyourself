@@ -80,9 +80,9 @@ chmod +x generate_config.sh
 echo -e "${YELLOW}⚙️ Validating compose configuration...${NC}"
 docker compose $COMPOSE_FILES config > /dev/null && echo -e "${GREEN}✅ Config OK${NC}" || { echo -e "${RED}❌ Config validation failed${NC}"; exit 1; }
 
-# Rebuild and restart
-echo -e "${YELLOW}🏗️ Rebuilding and restarting services...${NC}"
-docker compose $COMPOSE_FILES down
+# Rebuild images before restarting. The stack stays up during the build;
+# the down/up cycle happens in restart.sh.
+echo -e "${YELLOW}🏗️ Rebuilding images...${NC}"
 
 # Pull prebuilt images (signoz, immich, exporters, etc.); ignore failures for
 # services that build locally from a Dockerfile.
@@ -90,17 +90,14 @@ docker compose $COMPOSE_FILES pull --ignore-buildable || true
 
 # Build locally since some services use local Dockerfiles
 docker compose $COMPOSE_FILES build
-docker compose $COMPOSE_FILES up -d
+
+# Restart the stack (down + up -d + preset seeding) via restart.sh, which
+# skips its own lock because we already hold the shared update lock.
+echo -e "${YELLOW}🔄 Restarting services...${NC}"
+CYS_SKIP_LOCK=1 ./restart.sh "$HOST"
 
 echo ""
 echo -e "${GREEN}✅ Update complete for $HOST!${NC}"
-docker compose $COMPOSE_FILES ps
-
-# Seed OpenWebUI model presets (idempotent; skips gracefully if OPENWEBUI_API_KEY unset)
-echo -e "${YELLOW}🌱 Seeding OpenWebUI presets...${NC}"
-chmod +x scripts/seed-openwebui.sh
-./scripts/seed-openwebui.sh "$HOST" || echo -e "${YELLOW}⚠️  Preset seeding skipped or failed (non-fatal — see output above)${NC}"
-
 echo ""
 echo "Useful commands:"
 echo "  View logs:    docker compose $COMPOSE_FILES logs -f"

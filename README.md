@@ -237,6 +237,9 @@ cd /opt/docker/composeyourself
 ./deploy.sh rocketman
 ./update.sh rocketman
 
+# Restart the full stack (down + up) without an update
+./restart.sh rocketman
+
 # Check status
 docker compose -f docker-compose.yml -f docker-compose.rocketman.yml ps
 docker compose -f docker-compose.yml -f docker-compose.rocketman.yml logs -f
@@ -255,6 +258,9 @@ sudo journalctl -u composeyourself-rocketman.service -f
 cd /opt/docker/composeyourself
 ./deploy.sh sweetpaintedlady
 ./update.sh sweetpaintedlady
+
+# Restart the full stack (down + up) without an update
+./restart.sh sweetpaintedlady
 
 # Check status
 docker compose -f docker-compose.yml -f docker-compose.sweetpaintedlady.yml ps
