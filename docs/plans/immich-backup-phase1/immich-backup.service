@@ -1,0 +1,17 @@
+[Unit]
+Description=Immich nightly backup to Borg (USB) + rclone sync to Backblaze B2
+Documentation=https://github.com/borgbackup/borg
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/docker/composeyourself/docs/plans/immich-backup-phase1/backup.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=7200
+Nice=19
+IOSchedulingClass=idle
+IOSchedulingPriority=7

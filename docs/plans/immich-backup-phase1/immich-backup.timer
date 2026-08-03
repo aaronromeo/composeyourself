@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly Immich backup timer (2:00 AM)
+Requires=immich-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
