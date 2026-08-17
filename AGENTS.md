@@ -9,8 +9,8 @@ step for this repo itself.
 Two hosts, selected by argument to the scripts — never run `docker compose up` with a
 single file:
 
-- **rocketman** (Raspberry Pi): `docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml`
-- **sweetpaintedlady** (DigitalOcean VPS): `docker-compose.yml -f docker-compose.sweetpaintedlady.yml`
+- **rocketman** (Lenovo home desktop, x86-64, 16 GB RAM, Ubuntu 24.04): `docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml`
+- **sweetpaintedlady** (Hetzner CPX21 VPS): `docker-compose.yml -f docker-compose.sweetpaintedlady.yml`
 
 Key scripts (run on the target host in `/opt/docker/composeyourself`, as `dockerops`):
 
@@ -87,5 +87,9 @@ Preset seeding (`scripts/seed-openwebui.sh`) requires an `OPENWEBUI_API_KEY` in 
 - `docs/plans/OPENWEBUI_DEFAULTS_AS_CODE.md` — Open WebUI defaults-as-code design.
 - `docs/specs/` + `docs/plans/` contain dated design docs for each subsystem; read the
   relevant one before changing that area.
+- `docs/specs/assistant/` — requirements exploration for the OpenWebUI successor
+  (glossary in `CONTEXT.md`, research brief for handoff to a research agent). No
+  product decision made yet.
+- `docs/adr/` — architecture decision records (0001: self-hosted assistant only).
 - `README.md` is the current overview. `SERVICES.md` is partially stale (bottom half
   describes an old `pi-services`/Cloudflare layout that no longer exists).

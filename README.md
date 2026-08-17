@@ -6,8 +6,8 @@ Multi-host Docker Compose stack with MFA-protected services and secure inter-hos
 
 ComposeYourself is a multi-service Docker stack deployed across two hosts:
 
-- **rocketman** (Raspberry Pi) - Media services: yt-dlp, Discord announcements, Immich photo management
-- **sweetpaintedlady** (DigitalOcean VPS) - AI services: Open WebUI with Authelia MFA and Caddy reverse proxy
+- **rocketman** (Lenovo home desktop, x86-64, 16 GB RAM) - Media services: yt-dlp, Discord announcements, Immich photo management
+- **sweetpaintedlady** (Hetzner CPX21 VPS) - AI services: Open WebUI with Authelia MFA and Caddy reverse proxy
 
 Both hosts are connected via Tailscale for secure communication.
 
@@ -15,7 +15,7 @@ Both hosts are connected via Tailscale for secure communication.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  <your-domain.com> (DigitalOcean)      │
+│  <your-domain.com> (Hetzner)           │
 │  ────────────────────────────────────────────────────────   │
 │                                                             │
 │  Internet ──► Caddy:443 ──► Authelia MFA ──► Open WebUI    │
@@ -31,7 +31,7 @@ Both hosts are connected via Tailscale for secure communication.
 ┌───────┼─────────────────────────────────────────────────────┐
 │       │                                                     │
 │       ▼                                                     │
-│  rocketman (Raspberry Pi)                                  │
+│  rocketman (home desktop)                                  │
 │  ────────────────────────────────────────────────────────   │
 │                                                             │
 │  Services: yt-dlp, announcements, immich (+ redis, db)     │
@@ -68,11 +68,11 @@ composeyourself/
    - Docker and Docker Compose installed
    - Tailscale auth key (get from [login.tailscale.com](https://login.tailscale.com/admin/settings/keys))
 
-2. **Rocketman (Raspberry Pi):**
+2. **Rocketman (home desktop):**
    - External storage mounted at `/mnt/storage`
    - dockerops user created
 
-3. **Sweetpaintedlady (DigitalOcean):**
+3. **Sweetpaintedlady (Hetzner):**
    - Domain `<your-domain.com>` with DNS A record
    - Ports 80 and 443 open in firewall
 
@@ -120,7 +120,7 @@ AUTHELIA_SMTP_SENDER="Authelia <auth@yourdomain.com>"
 
 ## Deployment
 
-### Rocketman (Raspberry Pi)
+### Rocketman (home desktop)
 
 1. **Create dockerops user:**
 ```bash
@@ -166,7 +166,7 @@ cd /opt/docker/composeyourself
 sudo -u dockerops ./deploy.sh rocketman
 ```
 
-### Sweetpaintedlady (DigitalOcean)
+### Sweetpaintedlady (Hetzner)
 
 1. **Create dockerops user:**
 ```bash
@@ -224,7 +224,7 @@ sudo -u dockerops ./deploy.sh sweetpaintedlady
 ```
 
 8. **Setup DNS:**
-   - Create A record: `<your-domain.com>` → Your DO droplet IP
+   - Create A record: `<your-domain.com>` → the sweetpaintedlady VPS IP
    - Wait for DNS propagation
 
 ## Service Management
