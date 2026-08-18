@@ -1,0 +1,19 @@
+# SearXNG settings overlay for OpenWebUI integration.
+#
+# use_default_settings: true merges this file over the built-in defaults
+# (searx/settings.yml in the SearXNG repo). We only override what we need:
+#   - search.formats: add 'json' (required by OpenWebUI; without it, SearXNG
+#     returns 403 to OWUI's JSON queries).
+#
+# generate_config.sh copies this to services/searxng/core-config/settings.yml
+# on every deploy. The container entrypoint replaces "ultrasecretkey" with a
+# randomly generated secret_key on first boot.
+#
+# Reference: https://docs.searxng.org/admin/settings/settings.html#use-default-settings
+use_default_settings: true
+server:
+  secret_key: "ultrasecretkey"
+search:
+  formats:
+    - html
+    - json
