@@ -127,26 +127,24 @@ else
     echo -e "${GREEN}  ✓ Generated configuration.yml with domain: ${DOMAIN}${NC}"
 fi
 
-# --- OpenWebUI default model seed ---
-# Copy the committed config.json into the bind-mounted data dir so OWUI imports
-# it on next boot, re-asserting the declared default model.
+# --- OpenWebUI config ---
+# With ENABLE_PERSISTENT_CONFIG=False (set in docker-compose.sweetpaintedlady.yml),
+# env vars are authoritative on every boot. DEFAULT_MODELS and
+# DEFAULT_MODEL_METADATA replace the old config.json seed entirely — no
+# config.json copy is needed anymore.
 #
-# Why re-copy every deploy:
-#   OWUI renames config.json -> old_config.json after importing it, so the file
-#   is consumed. Re-copying on each deploy means the default model is always
-#   reset to the value declared in services/agenticui-config/config.json, which
-#   is the "strictly declarative" behaviour we want.
-#
-# NOTE: This only controls `ui.default_models` (and any other keys present in
-#   config.json). All other admin-panel settings continue to persist in webui.db
-#   across restarts (ENABLE_PERSISTENT_CONFIG defaults to true).
-#
-# PersistentConfig gotcha: DEFAULT_MODELS env var is only read on FIRST boot;
-#   after that the DB wins. This file-based seed re-applies the default on every
-#   deploy regardless of prior DB state — the env var alone is not enough.
-echo -e "${YELLOW}Seeding OpenWebUI default model config...${NC}"
-mkdir -p services/agenticui
-cp services/agenticui-config/config.json services/agenticui/config.json
-echo -e "${GREEN}  ✓ Copied agenticui-config/config.json -> services/agenticui/config.json${NC}"
+# The old config.json copy was:
+#   cp services/agenticui-config/config.json services/agenticui/config.json
+# This is retired because DEFAULT_MODELS env is now authoritative every boot
+# (not just first boot), which was the whole reason the copy existed.
+
+# --- SearXNG settings overlay ---
+# Copy the committed settings template into the live config dir. The searxng
+# container entrypoint replaces the "ultrasecretkey" placeholder with a random
+# secret_key on first boot.
+echo -e "${YELLOW}Seeding SearXNG settings...${NC}"
+mkdir -p services/searxng/core-config
+cp services/searxng-config/settings.yml services/searxng/core-config/settings.yml
+echo -e "${GREEN}  ✓ Copied searxng-config/settings.yml -> services/searxng/core-config/settings.yml${NC}"
 
 echo -e "${GREEN}Done!${NC}"
