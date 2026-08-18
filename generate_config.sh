@@ -144,16 +144,20 @@ fi
 # secret_key on first boot.
 echo -e "${YELLOW}Seeding SearXNG settings...${NC}"
 mkdir -p services/searxng/core-config
-cp services/searxng-config/settings.yml services/searxng/core-config/settings.yml
-# Replace the 'ultrasecretkey' placeholder with a random secret_key. The searxng
-# container's entrypoint only runs its own sed-replacement when settings.yml is
-# MISSING (the template-copy path); since we bind-mount our own, that sed is
-# skipped and Granian refuses to start with the default key
-# ("server.secret_key is not changed"). Generate here so every deploy produces
-# a fresh random key. (Internal API use only — no cookies to invalidate.)
+# Write the live settings.yml via a one-off docker run as root. The searxng
+# container runs as UID 977 and ends up owning the bind-mount source dir +
+# settings.yml (its entrypoint sed-replaces the secret_key placeholder when
+# the template-copy path runs, and the temp-file dance chowns to 977). That
+# means a direct cp/sed as dockerops (UID 999) hits "Permission denied" — we
+# hit this on the first deploy. Running as root inside an alpine container
+# bypasses the host perm check; the file ends up root-owned, which is fine
+# because the searxng container (UID 977) reads it as world-readable. All
+# writes to the live file happen here, reproducibly, from the repo.
 SEARXNG_SECRET_KEY=$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9')
-sed -i "s/ultrasecretkey/${SEARXNG_SECRET_KEY}/g" services/searxng/core-config/settings.yml
-echo -e "${GREEN}  ✓ Copied searxng-config/settings.yml -> services/searxng/core-config/settings.yml${NC}"
-echo -e "${GREEN}  ✓ Generated random SearXNG secret_key${NC}"
+docker run --rm -u root \
+    -v "$(pwd)/services/searxng-config/settings.yml:/src:ro" \
+    -v "$(pwd)/services/searxng/core-config:/dst" \
+    alpine sh -c "cp /src /dst/settings.yml && sed 's/ultrasecretkey/${SEARXNG_SECRET_KEY}/g' /dst/settings.yml > /dst/settings.yml.new && mv /dst/settings.yml.new /dst/settings.yml && chmod 644 /dst/settings.yml"
+echo -e "${GREEN}  ✓ Seeded services/searxng/core-config/settings.yml (random secret_key)${NC}"
 
 echo -e "${GREEN}Done!${NC}"
