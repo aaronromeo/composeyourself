@@ -56,12 +56,17 @@ gitignored (or regenerated):
 
 ## Open WebUI defaults-as-code
 
-Source of truth is `services/agenticui-config/` (`config.json` = default model,
-`models.json` = Cheap/Deep presets). `generate_config.sh` re-copies `config.json` on
-every deploy because OWUI renames it to `old_config.json` after importing; the
-`DEFAULT_MODELS` env var is only honored on first boot (PersistentConfig gotcha).
-Preset seeding (`scripts/seed-openwebui.sh`) requires an `OPENWEBUI_API_KEY` in `.env`
-(one-time bootstrap via admin UI); it no-ops gracefully until then.
+Source of truth is `services/agenticui-config/` (`models.json` = Cheap/Deep
+presets). `config.json` has been retired — `DEFAULT_MODELS` env is authoritative
+every boot thanks to `ENABLE_PERSISTENT_CONFIG=False` (env wins; Admin UI changes
+are session-only and revert on restart). `DEFAULT_MODEL_METADATA` env gives all
+models `web_search` + `builtin_tools` capabilities at startup. Preset seeding
+(`scripts/seed-openwebui.sh`) requires an `OPENWEBUI_API_KEY` in `.env`
+(one-time bootstrap via admin UI); it no-ops gracefully until then. SearXNG
+search engine config lives at `services/searxng-config/settings.yml`, copied to
+`services/searxng/core-config/` by `generate_config.sh` (same template-to-live
+pattern; the container entrypoint replaces the secret_key placeholder on first
+boot).
 
 ## Observability (SigNoz / OpenTelemetry)
 

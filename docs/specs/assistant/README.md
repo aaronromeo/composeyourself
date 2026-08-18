@@ -7,8 +7,9 @@ docs use its terms verbatim.
 ## Execution order
 
 1. **D1 — OpenWebUI upgrade** (v0.9.6 → v0.11.0, self-hosted SearXNG,
-   env-authoritative config): `2026-08-16-owui-upgrade-design.md`.
-   **Status: awaiting user review**, then `writing-plans`.
+   env-authoritative config): `2026-08-16-owui-upgrade-design.md` (spec) +
+   `../../plans/2026-08-16-owui-upgrade/plan.md` (implementation plan).
+   **Status: spec approved, plan ready for execution.**
 2. **D2 — n8n deployment + OWUI integration**: not yet designed. Gets its own
    brainstorm → spec → plan cycle after D1 ships.
 

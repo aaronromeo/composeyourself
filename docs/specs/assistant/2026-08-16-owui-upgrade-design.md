@@ -78,13 +78,12 @@ New env on the `openwebui` service:
 can be retired. `seed-openwebui.sh` stays: model presets are data rows seeded
 via the import API, unaffected by `ENABLE_PERSISTENT_CONFIG`.
 
-**Open verification for the plan phase:** whether the `models.json` import
-schema supports per-model *capabilities* and *default features* (so the
-Cheap/Deep presets carry "web search on" automatically — the three switches for
-agentic search are: global engine configured, Web Search capability on the
-model, Web Search under Default Features). If the schema doesn't support it,
-the fallback is a two-click UI setting per model that persists (model rows are
-data, not ConfigVars).
+**Resolved (plan phase):** `DEFAULT_MODEL_METADATA` env var gives ALL models
+`web_search` + `builtin_tools` capabilities at startup — including raw
+OpenRouter models that have no `models.json` entry. It is explicitly applied
+even with persistent config disabled. No `models.json` capabilities edit is
+needed. The `defaultFeatureIds: ["web_search"]` key in the same env var makes
+web search on-by-default in new chats for all models.
 
 **Doc updates in scope:** `AGENTS.md` and `SERVICES.md` must state that
 `ENABLE_PERSISTENT_CONFIG=False` means Admin UI edits do not persist across
