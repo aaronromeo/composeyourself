@@ -9,6 +9,15 @@ services/authelia/users_database.yml
 services/authelia/configuration.yml
 # Authelia OIDC keypair (generated per-host by generate_config.sh; secret)
 services/authelia/keys/
+# Legacy root-level key artifacts from an older generate_config.sh that wrote
+# to ./keys/ + ./private.pem + ./public.pem instead of services/authelia/keys/.
+# Current generation is services/authelia/keys/ (above). These three patterns
+# are a belt-and-braces in case a regression resurrects the legacy layout on a
+# host — anchored to repo root so they don't accidentally match future nested
+# keys/ or .pem files elsewhere in the tree.
+/keys/
+/private.pem
+/public.pem
 # Immich runtime data directory (host state)
 services/immich/library/
 *.log
