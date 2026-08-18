@@ -88,6 +88,32 @@ services:
       retries: 3
       start_period: 60s
 
+  # SearXNG - Internal web search engine for OpenWebUI
+  #
+  # Internal-only on cys-service (no host port). OpenWebUI reaches it at
+  # http://searxng:8080/search?q=<query>. Config is seeded from
+  # services/searxng-config/settings.yml by generate_config.sh.
+  #
+  # The container entrypoint auto-generates a random secret_key (replacing the
+  # "ultrasecretkey" placeholder in settings.yml) on first boot. No valkey
+  # service needed — limiter and valkey.url default to false in our settings.
+  searxng:
+    image: docker.io/searxng/searxng:2026.8.17-374939b88
+    container_name: searxng
+    restart: unless-stopped
+    logging: *default-logging
+    expose:
+      - "8080"
+    volumes:
+      - ./services/searxng/core-config:/etc/searxng:Z
+      - searxng_data:/var/cache/searxng
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    networks:
+      - cys-service
+
   # Caddy - Reverse Proxy with Auto HTTPS
   caddy:
     image: caddy:2.11.1
@@ -261,3 +287,5 @@ volumes:
     # Persist Authelia database and state
   otelcol_queue:
     # Persist the edge collector's disk-buffered sending_queue
+  searxng_data:
+    # Persist SearXNG cache (favicons, etc.)
