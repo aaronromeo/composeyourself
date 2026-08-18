@@ -51,7 +51,6 @@ gitignored (or regenerated):
   on **first** deploy; updates preserve server-side password changes. Edit the template
   or the file on the host, not this checkout.
 - `services/authelia/keys/` — OIDC keypair, wiped and regenerated every deploy.
-- `services/agenticui/config.json` — copied from `services/agenticui-config/config.json`.
 - `.env` — copy of `.env.example`; never commit.
 
 ## Open WebUI defaults-as-code

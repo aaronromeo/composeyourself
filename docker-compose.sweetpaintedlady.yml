@@ -73,7 +73,6 @@ services:
       # it in .env as OPENWEBUI_API_KEY. See .env.example for full instructions.
       - ENABLE_API_KEYS=true
       # OIDC Configuration with Authelia
-      - DEFAULT_MODELS=${OPENWEBUI_DEFAULT_MODELS:-}
       - DEFAULT_USER_ROLE=user
       - ENABLE_LOGIN_FORM=false
       - ENABLE_OAUTH_ROLE_MANAGEMENT=true
@@ -117,6 +116,10 @@ services:
       # persistent config disabled). Gives raw OpenRouter models web_search
       # + builtin_tools without needing a models.json entry per model.
       - 'DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"builtin_tools":true},"defaultFeatureIds":["web_search"]}'
+    # Start after SearXNG is healthy so OWUI's first boot never logs a DNS error.
+    depends_on:
+      searxng:
+        condition: service_healthy
     networks:
       - cys-service
     healthcheck:
@@ -151,6 +154,12 @@ services:
           memory: 256M
     networks:
       - cys-service
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8080/',timeout=3); sys.exit(0 if r.status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # Caddy - Reverse Proxy with Auto HTTPS
   caddy:

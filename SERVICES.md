@@ -15,10 +15,9 @@ This project is designed to host multiple Docker services on your Raspberry Pi i
 
 Settings are version-controlled and re-applied on every deploy — no clicking in the admin UI.
 
-**Default model** (`services/agenticui-config/config.json`):
+**Default model** (`DEFAULT_MODELS` env in `docker-compose.sweetpaintedlady.yml`):
 - New chats default to `anthropic/claude-sonnet-4.6`
-- `generate_config.sh` copies this file into `services/agenticui/` before `docker compose up`
-- OWUI imports it on boot (renames to `old_config.json`), re-asserting the default each deploy
+- `ENABLE_PERSISTENT_CONFIG=False` makes this env var authoritative on every boot (no file seed needed)
 
 **Model presets** (`services/agenticui-config/models.json`):
 
@@ -46,7 +45,7 @@ if the key is not yet set.
 
 #### Changing defaults or presets
 
-- **Default model**: edit `services/agenticui-config/config.json` → change `ui.default_models`.
+- **Default model**: edit `DEFAULT_MODELS` env in `docker-compose.sweetpaintedlady.yml`.
 - **Presets (system prompt, base model, params)**: edit `services/agenticui-config/models.json`.
 - Deploy → changes take effect on the next boot/import.
 
