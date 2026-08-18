@@ -24,25 +24,37 @@ x-logging: &default-logging
 services:
   # Open WebUI - AI Chat Interface
   #
-  # Default model + presets are managed as code (Strategy B):
+  # Config is fully env-authoritative (ENABLE_PERSISTENT_CONFIG=False): env vars
+  # win on every boot; Admin UI changes are session-only and revert on restart.
+  # This eliminates the PersistentConfig gotcha that caused the original web
+  # search incident (DB-stored config drifting from what the repo declares).
   #
-  #   Default model (ui.default_models):
-  #     generate_config.sh copies services/agenticui-config/config.json into
-  #     ./services/agenticui/config.json before every deploy. OWUI imports it on
-  #     boot and renames it to old_config.json.
+  # Default model: set via DEFAULT_MODELS env (replaces the old config.json
+  # seed, which was copied by generate_config.sh on every deploy — no longer
+  # needed because env is authoritative every boot, not just first boot).
   #
-  #     PersistentConfig gotcha: DEFAULT_MODELS env var is only honoured on FIRST
-  #     boot; after that the DB value wins. The config.json seed re-asserts the
-  #     default on every deploy regardless of prior DB state.
+  # Default capabilities (web_search, builtin_tools): set via
+  # DEFAULT_MODEL_METADATA env. Applied to all models at startup even with
+  # persistent config disabled. Per-model overrides in models.json presets
+  # take precedence.
   #
-  #   Named presets (Cheap / Deep):
-  #     scripts/seed-openwebui.sh POSTs services/agenticui-config/models.json to
-  #     POST /api/v1/models/import after each deploy. Requires ENABLE_API_KEYS=true
-  #     and OPENWEBUI_API_KEY set in .env (see .env.example for bootstrap steps).
-  #     The import endpoint upserts by id, so it is fully idempotent.
+  # Named presets (Cheap / Deep): scripts/seed-openwebui.sh POSTs
+  # services/agenticui-config/models.json to POST /api/v1/models/import after
+  # each deploy. Requires ENABLE_API_KEYS=true and OPENWEBUI_API_KEY in .env.
+  # The import endpoint upserts by id, so it is fully idempotent.
   #
+  # Web search: SearXNG (internal-only service, see below). Agentic search in
+  # Native mode — the model calls search_web/fetch_url as visible tool calls.
+  # Three switches: global engine (env), capability (DEFAULT_MODEL_METADATA),
+  # default feature (DEFAULT_MODEL_METADATA defaultFeatureIds).
+  #
+  # Sub-agents: delegate_task builtin tool, foreground + background. Cost
+  # guardrails: 5 concurrent, 3 background, 10 iterations per sub-agent.
+  #
+  # Automations: RRULE-scheduled prompts. Process-bound (restart kills a
+  # running automation); durable scheduling is D2's n8n job.
   openwebui:
-    image: ghcr.io/open-webui/open-webui:v0.9.6
+    image: ghcr.io/open-webui/open-webui:v0.11.0
     container_name: openwebui
     restart: unless-stopped
     logging: *default-logging
@@ -79,6 +91,32 @@ services:
       - OAUTH_SCOPES=openid email profile groups
       - OPENID_PROVIDER_URL=https://auth.${DOMAIN}/.well-known/openid-configuration
       - WEBUI_URL=https://${SUBDOMAIN}.${DOMAIN}
+      # ── Config authority ──────────────────────────────────────────
+      # Env wins, always. Admin UI changes are session-only.
+      - ENABLE_PERSISTENT_CONFIG=False
+      # ── Web search (SearXNG) ──────────────────────────────────────
+      - ENABLE_WEB_SEARCH=True
+      - WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
+      - WEB_SEARCH_RESULT_COUNT=5
+      - WEB_SEARCH_CONCURRENT_REQUESTS=10
+      # ── Capabilities (new in v0.11) ───────────────────────────────
+      - ENABLE_AUTOMATIONS=True
+      - ENABLE_SUBAGENTS=True
+      - SUBAGENTS_BACKGROUND_ENABLED=True
+      # Cost guardrails: conservative caps on metered API spend.
+      - SUBAGENTS_MAX_CONCURRENT=5
+      - SUBAGENTS_MAX_ASYNC=3
+      - SUBAGENTS_MAX_ITERATIONS=10
+      # ── Model defaults ─────────────────────────────────────────────
+      # Native function calling as global default (default since v0.10).
+      - 'DEFAULT_MODEL_PARAMS={"function_calling":"native"}'
+      # Default model (replaces the old config.json seed).
+      - DEFAULT_MODELS=anthropic/claude-sonnet-4.6
+      # Default capabilities for ALL models (applied at startup even with
+      # persistent config disabled). Gives raw OpenRouter models web_search
+      # + builtin_tools without needing a models.json entry per model.
+      - 'DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"builtin_tools":true},"defaultFeatureIds":["web_search"]}'
     networks:
       - cys-service
     healthcheck:
