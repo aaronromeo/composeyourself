@@ -145,6 +145,15 @@ fi
 echo -e "${YELLOW}Seeding SearXNG settings...${NC}"
 mkdir -p services/searxng/core-config
 cp services/searxng-config/settings.yml services/searxng/core-config/settings.yml
+# Replace the 'ultrasecretkey' placeholder with a random secret_key. The searxng
+# container's entrypoint only runs its own sed-replacement when settings.yml is
+# MISSING (the template-copy path); since we bind-mount our own, that sed is
+# skipped and Granian refuses to start with the default key
+# ("server.secret_key is not changed"). Generate here so every deploy produces
+# a fresh random key. (Internal API use only — no cookies to invalidate.)
+SEARXNG_SECRET_KEY=$(head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9')
+sed -i "s/ultrasecretkey/${SEARXNG_SECRET_KEY}/g" services/searxng/core-config/settings.yml
 echo -e "${GREEN}  ✓ Copied searxng-config/settings.yml -> services/searxng/core-config/settings.yml${NC}"
+echo -e "${GREEN}  ✓ Generated random SearXNG secret_key${NC}"
 
 echo -e "${GREEN}Done!${NC}"
