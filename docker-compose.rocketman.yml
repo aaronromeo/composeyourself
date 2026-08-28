@@ -107,6 +107,7 @@ services:
     environment:
       - DATA_DIR=/app/data
       - PORT=8080
+      - WEEK_START=Sunday
     networks:
       - cys-service
 
