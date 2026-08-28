@@ -54,7 +54,7 @@ services:
   # Automations: RRULE-scheduled prompts. Process-bound (restart kills a
   # running automation); durable scheduling is D2's n8n job.
   openwebui:
-    image: ghcr.io/open-webui/open-webui:v0.11.0
+    image: ghcr.io/open-webui/open-webui:v0.11.1
     container_name: openwebui
     restart: unless-stopped
     logging: *default-logging
