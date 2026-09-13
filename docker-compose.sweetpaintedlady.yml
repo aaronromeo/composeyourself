@@ -64,6 +64,11 @@ services:
       - "8080"
     volumes:
       - ./services/agenticui:/app/backend/data
+    # Google Workspace MCP (Gmail/Calendar/Docs/Sheets) tool connections.
+    # Written by generate_config.sh → scripts/gen-openwebui-mcp-connections.sh
+    # from GOOGLE_MCP_* in .env. Always present (comment-only when unconfigured).
+    env_file:
+      - services/agenticui/generated.env
     environment:
       - OPENAI_API_BASE_URL=https://openrouter.ai/api/v1
       - OPENAI_API_KEY=${OPENROUTER_API_KEY}
@@ -90,6 +95,12 @@ services:
       - OAUTH_SCOPES=openid email profile groups
       - OPENID_PROVIDER_URL=https://auth.${DOMAIN}/.well-known/openid-configuration
       - WEBUI_URL=https://${SUBDOMAIN}.${DOMAIN}
+      # Session signing + Fernet key, persisted in the data volume via
+      # WEBUI_SECRET_KEY_FILE (start.sh's default path is outside the volume —
+      # every container recreate would otherwise regenerate the key, logging
+      # everyone out and killing MCP OAuth refresh tokens). The file is
+      # ensured by generate_config.sh → scripts/gen-openwebui-mcp-connections.sh.
+      - WEBUI_SECRET_KEY_FILE=/app/backend/data/.webui_secret_key
       # ── Config authority ──────────────────────────────────────────
       # Env wins, always. Admin UI changes are session-only.
       - ENABLE_PERSISTENT_CONFIG=False

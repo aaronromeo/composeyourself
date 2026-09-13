@@ -160,4 +160,10 @@ docker run --rm -u root \
     alpine sh -c "cp /src /dst/settings.yml && sed 's/ultrasecretkey/${SEARXNG_SECRET_KEY}/g' /dst/settings.yml > /dst/settings.yml.new && mv /dst/settings.yml.new /dst/settings.yml && chmod 644 /dst/settings.yml"
 echo -e "${GREEN}  ✓ Seeded services/searxng/core-config/settings.yml (random secret_key)${NC}"
 
+# --- Open WebUI Google Workspace MCP connections ---
+# Wires GOOGLE_MCP_CLIENT_ID/SECRET into services/agenticui/generated.env
+# (TOOL_SERVER_CONNECTIONS). No-op with a comment-only file when unset.
+scripts/gen-openwebui-mcp-connections.sh \
+    || echo -e "${RED}  ✗ MCP connection generation failed — deploying WITHOUT Google Workspace tools${NC}"
+
 echo -e "${GREEN}Done!${NC}"
