@@ -98,6 +98,7 @@
         <table>trace_log</table>
         <partition_by>toYYYYMM(event_date)</partition_by>
         <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        <ttl>event_time + INTERVAL 3 DAY DELETE</ttl>
     </trace_log>
 
     <metric_log>
@@ -105,6 +106,7 @@
         <table>metric_log</table>
         <flush_interval_milliseconds>7500</flush_interval_milliseconds>
         <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+        <ttl>event_time + INTERVAL 3 DAY DELETE</ttl>
     </metric_log>
 
     <asynchronous_metric_log>
