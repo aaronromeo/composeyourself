@@ -172,6 +172,69 @@ services:
       retries: 3
       start_period: 15s
 
+  # Self-hosted Google Workspace MCP server (taylorwilsdon/google_workspace_mcp,
+  # pinned to the v1.26.1 git tag). Replaces Google's Developer-Preview-gated
+  # hosted MCP endpoints — see docs/specs/assistant/2026-09-14-google-workspace-mcp-decision-history.md
+  # and docs/plans/2026-09-14-workspace-mcp-swap.md.
+  #
+  # Single-user server OAuth: the server runs its own Google consent flow and
+  # stores ONE token server-side (keyed by USER_GOOGLE_EMAIL). Open WebUI
+  # connects with auth_type "none" — no per-user OAuth state in OWUI at all.
+  # All OWUI users share this single Google identity (accepted trade-off).
+  #
+  # This "legacy" HTTP mode has NO protocol auth on /mcp, so the endpoint must
+  # never be exposed publicly. Caddy proxies ONLY /oauth2callback (the browser
+  # consent redirect); Open WebUI reaches /mcp over the internal cys-service
+  # network. MCP_ENABLE_OAUTH21 stays unset — that's the multi-user PKCE mode
+  # we explicitly rejected.
+  google-workspace-mcp:
+    build:
+      context: https://github.com/taylorwilsdon/google_workspace_mcp.git#v1.26.1
+    image: google-workspace-mcp:1.26.1
+    container_name: google-workspace-mcp
+    restart: unless-stopped
+    logging: *default-logging
+    expose:
+      - "8000"
+    volumes:
+      # Google OAuth token store — persists the refresh token across
+      # restarts/rebuilds so consent is a one-time step.
+      - google_workspace_mcp_creds:/app/store_creds
+    environment:
+      # Reuse the GCP OAuth client the old wizard created (write scopes
+      # already registered, consent screen published to production).
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_MCP_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_MCP_CLIENT_SECRET}
+      # Browser-facing callback, routed via Caddy at workspace-mcp.$DOMAIN.
+      # Must also be registered in the GCP OAuth client's redirect URIs
+      # (manual step, see plan Task 7).
+      - GOOGLE_OAUTH_REDIRECT_URI=https://workspace-mcp.${DOMAIN}/oauth2callback
+      # The single Google account the server acts as. Server-side default:
+      # makes user_google_email optional on every tool and injects it
+      # automatically, so models never need to ask for an email.
+      - USER_GOOGLE_EMAIL=${USER_GOOGLE_EMAIL}
+      # Core tier for the 5 services the old hosted connections covered.
+      # The Dockerfile CMD expands TOOL_TIER/TOOLS into main.py args.
+      # Widen by editing this list (see upstream tool_tiers.yaml).
+      - TOOL_TIER=core
+      - TOOLS=gmail calendar docs sheets drive
+      # Legacy HTTP mode binds loopback unless told otherwise; the container
+      # must listen on the bridge network for OWUI + Caddy to reach it.
+      - WORKSPACE_MCP_HOST=0.0.0.0
+      - WORKSPACE_MCP_CREDENTIALS_DIR=/app/store_creds
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - cys-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Caddy - Reverse Proxy with Auto HTTPS
   caddy:
     image: caddy:2.11.1
@@ -347,3 +410,5 @@ volumes:
     # Persist the edge collector's disk-buffered sending_queue
   searxng_data:
     # Persist SearXNG cache (favicons, etc.)
+  google_workspace_mcp_creds:
+    # Persist the workspace-mcp Google OAuth token store
