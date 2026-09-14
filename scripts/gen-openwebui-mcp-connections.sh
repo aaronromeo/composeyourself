@@ -124,7 +124,14 @@ async def main():
             'auth_type': 'oauth_2.1_static',
             'headers': None,
             'key': None,
-            'config': {'enable': True},
+            # ponytail: no access_grants => admin-only in has_connection_access;
+            # wildcard user grant makes the servers usable by every user.
+            'config': {
+                'enable': True,
+                'access_grants': [
+                    {'principal_type': 'user', 'principal_id': '*', 'permission': 'read'}
+                ],
+            },
             'info': {
                 'id': service_id,
                 'name': name,
