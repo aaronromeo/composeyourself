@@ -82,3 +82,21 @@ auth.{$DOMAIN} {
         header_up X-Forwarded-Host {host}
     }
 }
+
+# Self-hosted Google Workspace MCP — public ONLY for the OAuth callback.
+# Google redirects the user's browser to /oauth2callback after consent.
+# The MCP endpoint (/mcp) is deliberately NOT proxied: legacy-mode
+# workspace-mcp has no protocol auth, and Open WebUI reaches it over the
+# internal cys-service network (http://google-workspace-mcp:8000/mcp).
+# Everything else 404s so the unauthenticated /mcp endpoint is never
+# exposed to the internet.
+workspace-mcp.{$DOMAIN} {
+    handle /oauth2callback {
+        reverse_proxy google-workspace-mcp:8000
+    }
+    # Catch-all: handle blocks are mutually exclusive and ordered, so this
+    # takes everything the first block didn't match.
+    handle {
+        respond 404
+    }
+}
