@@ -64,9 +64,9 @@ services:
       - "8080"
     volumes:
       - ./services/agenticui:/app/backend/data
-    # Google Workspace MCP (Gmail/Calendar/Docs/Sheets) tool connections.
-    # Written by generate_config.sh → scripts/gen-openwebui-mcp-connections.sh
-    # from GOOGLE_MCP_* in .env. Always present (comment-only when unconfigured).
+    # Google Workspace MCP tool connection (single self-hosted server).
+    # Written by generate_config.sh → scripts/gen-openwebui-mcp-connections.sh;
+    # gated on USER_GOOGLE_EMAIL in .env. Comment-only when unconfigured.
     env_file:
       - services/agenticui/generated.env
     environment:
