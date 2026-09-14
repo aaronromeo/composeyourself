@@ -83,20 +83,25 @@ from open_webui.utils.oauth import (
 )
 
 # service id, display name, MCP endpoint, OAuth scopes.
-# ponytail: read-only scopes; add gmail.compose / calendar event write when needed
 SERVICES = [
     ('google-gmail', 'Google Gmail', 'https://gmailmcp.googleapis.com/mcp/v1',
-     'https://www.googleapis.com/auth/gmail.readonly'),
+     'https://www.googleapis.com/auth/gmail.readonly '
+     'https://www.googleapis.com/auth/gmail.compose '
+     'https://www.googleapis.com/auth/gmail.modify '
+     'https://www.googleapis.com/auth/gmail.labels'),
     ('google-calendar', 'Google Calendar', 'https://calendarmcp.googleapis.com/mcp/v1',
      'https://www.googleapis.com/auth/calendar.calendarlist.readonly '
      'https://www.googleapis.com/auth/calendar.events.freebusy '
-     'https://www.googleapis.com/auth/calendar.events.readonly'),
+     'https://www.googleapis.com/auth/calendar.events.readonly '
+     'https://www.googleapis.com/auth/calendar.events'),
     ('google-docs', 'Google Docs', 'https://docsmcp.googleapis.com/mcp/v1',
      'https://www.googleapis.com/auth/drive.readonly '
-     'https://www.googleapis.com/auth/documents.readonly'),
+     'https://www.googleapis.com/auth/documents.readonly '
+     'https://www.googleapis.com/auth/documents'),
     ('google-sheets', 'Google Sheets', 'https://sheetsmcp.googleapis.com/mcp/v1',
      'https://www.googleapis.com/auth/drive.readonly '
-     'https://www.googleapis.com/auth/spreadsheets.readonly'),
+     'https://www.googleapis.com/auth/spreadsheets.readonly '
+     'https://www.googleapis.com/auth/spreadsheets'),
 ]
 
 
