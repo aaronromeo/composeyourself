@@ -1,3 +1,13 @@
+> **STATUS: SUPERSEDED (2026-09-14).** The per-user OAuth design described
+> here (four hosted Google MCP connections, `oauth_2.1_static`, per-user
+> `oauth_session` rows) was replaced by a single self-hosted workspace-mcp
+> container using single-user server OAuth. See
+> [docs/plans/2026-09-14-workspace-mcp-swap.md](../../plans/2026-09-14-workspace-mcp-swap.md),
+> [2026-09-14-google-workspace-mcp-alternatives.md](2026-09-14-google-workspace-mcp-alternatives.md),
+> and
+> [2026-09-14-google-workspace-mcp-decision-history.md](2026-09-14-google-workspace-mcp-decision-history.md).
+> Kept for historical context.
+
 # Open WebUI Google Workspace Access — Research Findings
 
 **Date:** 2026-09-12
