@@ -97,6 +97,14 @@ docker compose $COMPOSE_FILES up -d
 echo -e "${GREEN}✅ Checking deployment status...${NC}"
 docker compose $COMPOSE_FILES ps
 
+# The otelcol-agent (uid 10001) can't create its disk-queue files in a fresh
+# root-owned named volume — chown it like the rocketman SigNoz dirs. No-op on
+# redeploys (named volumes persist across down/up).
+if [ "$HOST" = "sweetpaintedlady" ]; then
+    docker run --rm -v composeyourself_otelcol_queue:/q alpine:3 chown -R 10001:10001 /q
+    docker compose $COMPOSE_FILES restart otelcol-agent
+fi
+
 # Seed OpenWebUI model presets (idempotent; skips gracefully if OPENWEBUI_API_KEY unset)
 echo -e "${YELLOW}🌱 Seeding OpenWebUI presets...${NC}"
 chmod +x scripts/seed-openwebui.sh
