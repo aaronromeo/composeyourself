@@ -12,6 +12,14 @@ single file:
 - **rocketman** (Lenovo home desktop, x86-64, 16 GB RAM, Ubuntu 24.04): `docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml`
 - **sweetpaintedlady** (Hetzner CPX21 VPS): `docker-compose.yml -f docker-compose.sweetpaintedlady.yml`
 
+Which host a session is on: check `hostname` — never infer it from SSH
+reachability. `rocketman` means the session is ON rocketman: the deploy
+checkout is `/opt/docker/composeyourself` (dockerops-owned; run git/compose ops
+there via `sg dockerops -c "..."`), and `~/workspace/composeyourself` is the
+dev checkout on the same machine. SSH-ing to `rocketman` from rocketman
+connects to itself and proves nothing. `sweetpaintedlady` is the only remote
+host: `ssh -i ~/.ssh/Hetzner dockerops@agentic.overachieverlabs.com`.
+
 Key scripts (run on the target host in `/opt/docker/composeyourself`, as `dockerops`):
 
 - `./deploy.sh <host>` — first deploy. Runs `make sync-submodules`, `generate_config.sh`,
