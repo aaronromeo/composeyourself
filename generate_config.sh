@@ -39,6 +39,14 @@ if [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
+# SUBDOMAIN is needed by the Homer index (sweetpaintedlady links) — leaving
+# it unset would silently render "https://.domain" links on the dashboard.
+if [ -z "$SUBDOMAIN" ]; then
+    echo -e "${RED}Error: SUBDOMAIN environment variable is not set${NC}"
+    echo "Please set it in your .env file"
+    exit 1
+fi
+
 # --- Authelia (only on hosts that run it, i.e. OAUTH_CLIENT_SECRET is set) ---
 if [ -z "${OAUTH_CLIENT_SECRET}" ]; then
     echo -e "${GREEN}  ✓ OAUTH_CLIENT_SECRET not set — skipping Authelia config (not needed on this host)${NC}"
@@ -159,6 +167,17 @@ docker run --rm -u root \
     -v "$(pwd)/services/searxng/core-config:/dst" \
     alpine sh -c "cp /src /dst/settings.yml && sed 's/ultrasecretkey/${SEARXNG_SECRET_KEY}/g' /dst/settings.yml > /dst/settings.yml.new && mv /dst/settings.yml.new /dst/settings.yml && chmod 644 /dst/settings.yml"
 echo -e "${GREEN}  ✓ Seeded services/searxng/core-config/settings.yml (random secret_key)${NC}"
+
+# --- Homer service index (rocketman) ---
+# Render the dashboard config from the template. DOMAIN/SUBDOMAIN supply the
+# sweetpaintedlady links (public HTTPS); the rocketman links use its Tailscale
+# MagicDNS name. The output is bind-mounted read-only into the homer container.
+echo -e "${YELLOW}Generating Homer service index...${NC}"
+mkdir -p services/homer/assets
+envsubst '$DOMAIN $SUBDOMAIN' \
+    < services/homer/config.yml.template \
+    > services/homer/assets/config.yml
+echo -e "${GREEN}  ✓ Generated services/homer/assets/config.yml${NC}"
 
 # --- Open WebUI Google Workspace MCP connections ---
 # Wires GOOGLE_MCP_CLIENT_ID/SECRET into services/agenticui/generated.env

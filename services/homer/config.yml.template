@@ -1,0 +1,44 @@
+# Homer service index. Rendered by generate_config.sh into
+# services/homer/assets/config.yml, which the homer container on rocketman
+# bind-mounts read-only. Rocketman URLs use its Tailscale MagicDNS name, so
+# they resolve only from inside the tailnet; sweetpaintedlady URLs are public
+# HTTPS via Caddy and resolve from anywhere.
+title: "Compose Yourself"
+subtitle: "Service index"
+header: true
+columns: 3
+connectivityCheck: true
+services:
+  - name: "Rocketman"
+    icon: "fas fa-server"
+    items:
+      - name: "yt-dlp"
+        subtitle: "Video/audio downloader"
+        url: "http://rocketman:8082"
+        target: "_blank"
+      - name: "Immich"
+        subtitle: "Photos"
+        url: "http://rocketman:2283"
+        target: "_blank"
+      - name: "SigNoz"
+        subtitle: "Observability"
+        url: "http://rocketman:8080"
+        target: "_blank"
+      - name: "swole"
+        url: "http://rocketman:8090"
+        target: "_blank"
+      - name: "announcements"
+        subtitle: "Discord webhook"
+        url: "http://rocketman:8091"
+        target: "_blank"
+  - name: "Sweetpaintedlady"
+    icon: "fas fa-cloud"
+    items:
+      - name: "Open WebUI"
+        subtitle: "AI chat"
+        url: "https://${SUBDOMAIN}.${DOMAIN}"
+        target: "_blank"
+      - name: "Authelia"
+        subtitle: "Auth portal"
+        url: "https://auth.${DOMAIN}"
+        target: "_blank"
