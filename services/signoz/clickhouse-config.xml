@@ -38,15 +38,19 @@
          0.5 (2G budget) resident memory ~3G exceeded the budget and the
          OvercommitTracker 241-killed every query, wedging the schema
          migrator in its bootstrap retry loop (2026-09-20). If 241s return
-         at peaks, shrink the cache ceilings below (mark_cache_size 5G)
-         before raising this. -->
+         at peaks, shrink the cache ceilings below before raising this. -->
     <max_server_memory_usage_to_ram_ratio>0.95</max_server_memory_usage_to_ram_ratio>
 
     <total_memory_profiler_step>4194304</total_memory_profiler_step>
     <total_memory_tracker_sample_probability>0</total_memory_tracker_sample_probability>
 
-    <uncompressed_cache_size>8589934592</uncompressed_cache_size>
-    <mark_cache_size>5368709120</mark_cache_size>
+    <!-- Cache ceilings sized for the 4G cgroup. Upstream defaults (mark 5G,
+         uncompressed 8G) starved insert/query headroom: RSS ~2.8G left ~1G
+         for work, and the samples_v4_agg_5m_mv rollup push on every metrics
+         export batch hit the ceiling (241) in a deterministic retry loop
+         (2026-09-20). Uncompressed cache off = stock ClickHouse default. -->
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <mark_cache_size>1073741824</mark_cache_size>
     <mmap_cache_size>1000</mmap_cache_size>
     <compiled_expression_cache_size>134217728</compiled_expression_cache_size>
     <compiled_expression_cache_elements_size>10000</compiled_expression_cache_elements_size>
