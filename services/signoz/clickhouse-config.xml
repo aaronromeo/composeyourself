@@ -27,14 +27,20 @@
     <keep_alive_timeout>3</keep_alive_timeout>
     <max_concurrent_queries>100</max_concurrent_queries>
 
-    <!-- Resident memory cap. Zero means use max_server_memory_usage_to_ram_ratio
-         of physical RAM (set below). -->
+    <!-- Resident memory cap. Zero means derive from
+         max_server_memory_usage_to_ram_ratio (set below). -->
     <max_server_memory_usage>0</max_server_memory_usage>
     <max_thread_pool_size>10000</max_thread_pool_size>
 
-    <!-- Constrained host (Raspberry Pi). Cap ClickHouse at half of physical RAM
-         (the compose deploy limit is 4G). REQUIRED for this deployment. -->
-    <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
+    <!-- Budget = ratio x cgroup limit (ClickHouse reads the Docker memory
+         limit, not host RAM): 0.95 x 4G = 3.8G, matching
+         cgroup_memory_watcher_hard_limit_ratio as the backstop. At the old
+         0.5 (2G budget) resident memory ~3G exceeded the budget and the
+         OvercommitTracker 241-killed every query, wedging the schema
+         migrator in its bootstrap retry loop (2026-09-20). If 241s return
+         at peaks, shrink the cache ceilings below (mark_cache_size 5G)
+         before raising this. -->
+    <max_server_memory_usage_to_ram_ratio>0.95</max_server_memory_usage_to_ram_ratio>
 
     <total_memory_profiler_step>4194304</total_memory_profiler_step>
     <total_memory_tracker_sample_probability>0</total_memory_tracker_sample_probability>
