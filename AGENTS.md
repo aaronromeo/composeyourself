@@ -67,7 +67,9 @@ Source of truth is `services/agenticui-config/` (`models.json` = Cheap/Deep
 presets). `config.json` has been retired — `DEFAULT_MODELS` env is authoritative
 every boot thanks to `ENABLE_PERSISTENT_CONFIG=False` (env wins; Admin UI changes
 are session-only and revert on restart). `DEFAULT_MODEL_METADATA` env gives all
-models `web_search` + `builtin_tools` capabilities at startup. Preset seeding
+models `web_search` + `builtin_tools` + `vision` capabilities at startup; presets
+override per-model in `models.json` (`cheap`: vision off — qwen3-coder is
+text-only; `deep`: vision on). Preset seeding
 (`scripts/seed-openwebui.sh`) requires an `OPENWEBUI_API_KEY` in `.env`
 (one-time bootstrap via admin UI); it no-ops gracefully until then. SearXNG
 search engine config lives at `services/searxng-config/settings.yml`, copied to

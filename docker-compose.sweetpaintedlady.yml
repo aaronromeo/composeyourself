@@ -125,8 +125,11 @@ services:
       - DEFAULT_MODELS=anthropic/claude-sonnet-4.6
       # Default capabilities for ALL models (applied at startup even with
       # persistent config disabled). Gives raw OpenRouter models web_search
-      # + builtin_tools without needing a models.json entry per model.
-      - 'DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"builtin_tools":true},"defaultFeatureIds":["web_search"]}'
+      # + builtin_tools + vision without needing a models.json entry per
+      # model. Vision is gated per preset in models.json (cheap: false —
+      # qwen3-coder is text-only; deep: true). Text-only raw OpenRouter
+      # models will still 404 on image upload; pick a vision variant.
+      - 'DEFAULT_MODEL_METADATA={"capabilities":{"web_search":true,"builtin_tools":true,"vision":true},"defaultFeatureIds":["web_search"]}'
     # Start after SearXNG is healthy so OWUI's first boot never logs a DNS error.
     depends_on:
       searxng:
