@@ -92,6 +92,9 @@ boot).
   condition: service_healthy` — after `down` the tailnet interface is gone until the
   tailscale container re-establishes it, so an ungated bind fails with "cannot assign
   requested address".
+- `announcements` additionally publishes `:8091` on the LAN via `LAN_BIND_ADDR`
+  (default `127.0.0.1`) — host-side alerting scripts on rocketman (the rocketman
+  repo's watchdogs + backup announcer) POST there without a Tailscale dependency.
 - SigNoz data dirs are chowned `1000:1000` and ClickHouse publishes no host port.
 
 ## Docs

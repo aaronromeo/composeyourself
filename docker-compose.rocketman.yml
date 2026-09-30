@@ -71,7 +71,12 @@ services:
     logging: *default-logging
     ports:
       - "${TAILNET_BIND_ADDR:-127.0.0.1}:8091:8091"
-    # Bound to the tailnet IP — wait for tailscale to bring up the interface
+      # LAN binding: host-side alerting scripts on rocketman (the rocketman
+      # repo's watchdogs + backup announcer) POST here without a Tailscale
+      # dependency. The LAN interface exists at boot, but the service-level
+      # tailscale gate below still applies to the whole container.
+      - "${LAN_BIND_ADDR:-127.0.0.1}:8091:8091"
+    # The tailnet binding waits for tailscale to bring up the interface
     # (see docker-compose.yml tailscale healthcheck).
     depends_on:
       tailscale:
