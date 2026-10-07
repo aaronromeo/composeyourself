@@ -36,11 +36,21 @@ services:
       - /mnt/storage/media/downloads/audio:/downloads/audio
       # Logs and state
       - /mnt/storage/media/downloads/.logs:/app/logs
+      # YouTube Premium cookie jar (services/yt-dlp/scripts/pull_yt_cookies.py
+      # refreshes it). Deliberately NOT :ro — yt-dlp saves the jar back on
+      # exit, so a read-only mount fails every download. Safe from /downloads
+      # because it lives outside DOWNLOAD_DIR, which the app serves unauthenticated.
+      # Deliberate exception to the "bind to a service-owned path" pattern used
+      # elsewhere in this file: the host dir is aaron-owned (uid 1000) to match
+      # the container's app uid, so no sudo is needed to refresh it.
+      - /home/aaron/.config/yt-dlp:/app/cookies
     environment:
       # Download directories
       - DOWNLOAD_DIR=/downloads
       - AUDIO_DIR=/downloads/audio
       - LOG_FILE=/app/logs/yt-dlp-web.log
+      # Authenticated YouTube session (up to ~256k Premium vs ~130k anonymous)
+      - COOKIES_FILE=/app/cookies/cookies.txt
       # Server configuration
       - PORT=8080
       # Optional: Set timezone
