@@ -3,6 +3,7 @@
 # Services:
 #   - yt-dlp: Video/audio downloader web interface
 #   - announcements: Discord webhook service
+#   - hs-prices: Healthy Selections vendor-price adapter (no auth, loopback only)
 #   - immich: Photo management (server, ML, redis, postgres)
 #
 # Usage:
@@ -341,6 +342,42 @@ services:
         condition: service_healthy
     volumes:
       - ./services/homer/assets/config.yml:/www/assets/config.yml:ro
+
+  # HS price service — the menu planner's vendor-price adapter, built from the
+  # rawlinsonsnp repo consumed as a submodule (services/rawlinsonsnp).
+  #
+  # NO AUTH: both endpoints are open, so exposure is pinned to loopback. This is
+  # its own knob (HS_PRICES_BIND_ADDR) rather than TAILNET_BIND_ADDR so a
+  # tailnet-wide rebind can never silently publish an unauthenticated service.
+  #
+  # BIND_HOST must be 0.0.0.0 HERE, not in the image: on a bridge network the
+  # container's 127.0.0.1 is its own loopback, so the Dockerfile default would
+  # answer nothing through the published port. The loopback guarantee is then
+  # enforced by Docker's host-side publish, not by an env default.
+  #
+  # No tailscale gate on purpose — menu runs need prices whether or not the
+  # tailnet is up.
+  hs-prices:
+    build:
+      context: ./services/rawlinsonsnp/services/hs-prices
+      dockerfile: Dockerfile
+    container_name: hs-prices
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "${HS_PRICES_BIND_ADDR:-127.0.0.1}:8787:8787"
+    environment:
+      - PORT=8787
+      - CACHE_TTL_MS=900000
+      - BIND_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cys-service
 
 # Shared network for all services
 networks:
