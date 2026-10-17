@@ -23,6 +23,8 @@ services/authelia/keys/
 /public.pem
 # Immich runtime data directory (host state)
 services/immich/library/
+# Tesserae runtime data directory (host state)
+services/tesserae/data/
 *.log
 *.bak
 .DS_Store

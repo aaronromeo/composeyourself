@@ -388,18 +388,25 @@ services:
     networks:
       - cys-service
 
+  # Tesserae — e-ink panel dashboard, bridge networking.
+  # TESSERAE_HOST_IP doubles as the published bind address and the IP Tesserae
+  # advertises to panels in render-frame/MQTT URLs, so both must be the same
+  # host IP. The :? guard makes a missing secret key abort the deploy instead
+  # of silently running with an empty key (which would leave stored secrets
+  # undecryptable after a data-folder restore).
   tesserae:
-    image: ghcr.io/dmellok/tesserae:latest
+    image: ghcr.io/dmellok/tesserae:${TESSERAE_VERSION:-0.418.1}
     container_name: tesserae
     restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "8765:8765"
+      - "${TESSERAE_HOST_IP:-127.0.0.1}:8765:8765"
     environment:
-      TESSERAE_SECRET_KEY: "<the 64 hex chars from above>"
+      TESSERAE_SECRET_KEY: "${TESSERAE_SECRET_KEY:?set TESSERAE_SECRET_KEY in .env (openssl rand -hex 32)}"
       TESSERAE_IN_DOCKER: "1"
-      TESSERAE_HOST_IP: "${HS_PRICES_BIND_ADDR:-127.0.0.1}"
+      TESSERAE_HOST_IP: "${TESSERAE_HOST_IP:-127.0.0.1}"
     volumes:
-      - ./data:/app/data
+      - ./services/tesserae/data:/app/data
 
 # Shared network for all services
 networks:
