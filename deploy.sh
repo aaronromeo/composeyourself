@@ -47,7 +47,7 @@ esac
 # Set compose files based on host
 if [ "$HOST" = "rocketman" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.rocketman.yml -f services/signoz/docker-compose.signoz.yml"
-    echo -e "${YELLOW}📦 Services: yt-dlp, announcements, immich, signoz (observability)${NC}"
+    echo -e "${YELLOW}📦 Services: yt-dlp, announcements, hs-prices, immich, signoz (observability)${NC}"
 elif [ "$HOST" = "sweetpaintedlady" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f docker-compose.sweetpaintedlady.yml"
     echo -e "${YELLOW}📦 Services: Open WebUI, Caddy, Authelia${NC}"

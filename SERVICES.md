@@ -69,6 +69,15 @@ the container user (root) can write to it.
 - **Purpose**: Download videos/audio from YouTube and other sites
 - **Features**: Web UI, queue management, audio extraction, progress monitoring
 
+## Rocketman Services Table
+
+| Location | Port | Purpose | Features |
+| --- | --- | --- | --- |
+| `./services/rawlinsonsnp/services/hs-prices` | `127.0.0.1:8787` | Healthy Selections vendor-price adapter for menu planning | Submodule build, no auth, loopback-only publish, 15-min catalog cache |
+
+> **Security note — do not undo either half of the loopback pin:**
+> The `hs-prices` service has **no authentication** — `GET /health` and `GET /catalog` are open to anyone who can reach the port. The publish mapping pins the host side to `127.0.0.1` so only processes on the host itself can reach it. Inside the container `BIND_HOST=0.0.0.0` listens on all interfaces *within* the container namespace; that is the deliberate counterpart to the host-side loopback pin. If you change the publish binding to `0.0.0.0` or set `BIND_HOST` to anything other than `0.0.0.0`, you will either expose the service to the network or break it — neither is safe. Leave both as they are.
+
 ## Planned Services (Examples)
 
 ### Media Server Options
