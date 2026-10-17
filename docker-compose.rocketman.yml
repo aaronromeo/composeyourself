@@ -388,6 +388,19 @@ services:
     networks:
       - cys-service
 
+  tesserae:
+    image: ghcr.io/dmellok/tesserae:latest
+    container_name: tesserae
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      TESSERAE_SECRET_KEY: "<the 64 hex chars from above>"
+      TESSERAE_IN_DOCKER: "1"
+      TESSERAE_HOST_IP: "${HS_PRICES_BIND_ADDR:-127.0.0.1}"
+    volumes:
+      - ./data:/app/data
+
 # Shared network for all services
 networks:
   cys-service:
