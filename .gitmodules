@@ -10,3 +10,7 @@
 	path = services/swole
 	url = git@github.com:aaronromeo/uha-hyp-5k-std.git
 	branch = main
+[submodule "services/rawlinsonsnp"]
+	path = services/rawlinsonsnp
+	url = https://github.com/rawlinsoncs/rawlinsonsnp.git
+	branch = main

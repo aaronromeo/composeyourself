@@ -24,10 +24,10 @@ sync-submodules:
 update-submodules:
 	git submodule sync --recursive
 	git submodule update --init --remote --merge --recursive
-	git add services/announcements services/swole services/yt-dlp
+	git add services/announcements services/rawlinsonsnp services/swole services/yt-dlp
 	@echo ""
 	@echo "Submodules advanced to latest upstream main. Staged pointer changes:"
-	@git diff --staged --submodule=log -- services/announcements services/swole services/yt-dlp || true
+	@git diff --staged --submodule=log -- services/announcements services/rawlinsonsnp services/swole services/yt-dlp || true
 	@echo ""
 	@echo "Next: review above, then commit with e.g.:"
 	@echo "    git commit -m 'Bump submodules to latest main'"
