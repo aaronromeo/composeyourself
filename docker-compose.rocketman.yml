@@ -44,6 +44,12 @@ services:
       # elsewhere in this file: the host dir is aaron-owned (uid 1000) to match
       # the container's app uid, so no sudo is needed to refresh it.
       - /home/aaron/.config/yt-dlp:/app/cookies
+      # SSH private key for LAN pushes (rsync-over-ssh, see the "Push to LAN"
+      # card in the yt-dlp UI). Read-only: the key is never modified. The host
+      # file is aaron-owned (uid 1000) mode 600, matching the container's app
+      # uid, and lives outside DOWNLOAD_DIR (like the cookie jar) so it is not
+      # served by the app.
+      - /home/aaron/.ssh/id_ed25519:/app/.ssh/id_ed25519:ro
     environment:
       # Download directories
       - DOWNLOAD_DIR=/downloads
