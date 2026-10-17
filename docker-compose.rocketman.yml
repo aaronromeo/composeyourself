@@ -51,6 +51,12 @@ services:
       # uid, and lives outside DOWNLOAD_DIR (like the cookie jar) so it is not
       # served by the app.
       - /home/aaron/.ssh/id_ed25519:/app/.ssh/id_ed25519:ro
+    # LAN push targets have no resolvable DNS/mDNS names on this network, so map
+    # the friendly names the app/UI use to their static LAN IPs. Keeping names
+    # (rather than IPs) stable means only this line changes if a host moves.
+    extra_hosts:
+      - "normajean:192.168.68.89"
+      - "madman:192.168.68.59"
     environment:
       # Download directories
       - DOWNLOAD_DIR=/downloads
@@ -60,6 +66,9 @@ services:
       - COOKIES_FILE=/app/cookies/cookies.txt
       # Server configuration
       - PORT=8080
+      # SSH user for LAN pushes (the shared key is authorized for 'pi' on the
+      # normajean/madman targets; the app default is already 'pi').
+      - PUSH_USER=pi
       # Optional: Set timezone
       - TZ=America/Toronto
     healthcheck:
