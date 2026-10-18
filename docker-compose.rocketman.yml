@@ -69,6 +69,10 @@ services:
       # SSH user for LAN pushes (the shared key is authorized for 'pi' on the
       # normajean/madman targets; the app default is already 'pi').
       - PUSH_USER=pi
+      # Library root on the push targets for blank-destination pushes: the
+      # album folder is created inside it (~/mp3s on both hosts; matches
+      # PUSH_DEST_ROOT in app.py).
+      - PUSH_DEST_ROOT=mp3s
       # Optional: Set timezone
       - TZ=America/Toronto
     healthcheck:
